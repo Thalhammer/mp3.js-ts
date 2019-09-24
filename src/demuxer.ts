@@ -14,22 +14,20 @@ export class MP3Demuxer extends AV.Demuxer {
     private sentInfo: boolean;
 
     static probe(stream: AV.Stream) {
-        var off = stream.offset;
+        let off = stream.offset;
 
         // skip id3 metadata if it exists
-        var id3header = MP3Demuxer.getID3v2Header(stream);
+        let id3header = MP3Demuxer.getID3v2Header(stream);
         if (id3header)
             stream.advance(10 + id3header.length);
 
         // attempt to read the header of the first audio frame
-        var s = new MP3Stream(new AV.Bitstream(stream));
-        var header = null;
+        let s = new MP3Stream(new AV.Bitstream(stream));
+        let header = null;
 
         try {
             header = MP3FrameHeader.decode(s);
-        } catch (e) {
-            console.log(e);
-        };
+        } catch (e) {};
 
         // go back to the beginning, for other probes
         stream.seek(off);
@@ -37,7 +35,7 @@ export class MP3Demuxer extends AV.Demuxer {
         return !!header;
     }
 
-    static getID3v2Header(stream) :{
+    static getID3v2Header(stream) : {
         version: string;
         major: number;
         minor: number;

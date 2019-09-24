@@ -3,13 +3,13 @@ import {MP3FrameHeader} from './header';
 
 export class MP3Stream {
     private stream: AV.Bitstream;                     // actual bitstream
-    private sync;                        // stream sync found
-    private freerate;                        // free bitrate (fixed)
-    private this_frame;   // start of current frame
-    private next_frame;   // start of next frame
+    private sync: boolean;                        // stream sync found
+    private freerate: number;                        // free bitrate (fixed)
+    private this_frame: number;   // start of current frame
+    private next_frame: number;   // start of next frame
 
-    private main_data; // actual audio data
-    private md_len;                               // length of main data
+    private main_data: Uint8Array; // actual audio data
+    private md_len: number;                               // length of main data
 
 
     constructor(stream: AV.Bitstream) {
@@ -39,12 +39,27 @@ export class MP3Stream {
     getU8(offset) {
         var stream = this.stream.stream;
         return stream.peekUInt8(offset - stream.offset);
-    };
+    }
 
+    getU16(offset) {
+        var stream = this.stream.stream;
+        return stream.peekUInt16(offset - stream.offset);
+    }
+
+    getU24(offset) {
+        var stream = this.stream.stream;
+        return stream.peekUInt24(offset - stream.offset);
+    }
+
+    getU32(offset) {
+        var stream = this.stream.stream;
+        return stream.peekUInt32(offset - stream.offset);
+    }
+    
     nextByte() {
         var stream = this.stream;
         return stream.bitPosition === 0 ? stream.stream.offset : stream.stream.offset + 1;
-    };
+    }
 
     doSync() {
         var stream = this.stream.stream;
@@ -58,11 +73,11 @@ export class MP3Stream {
             return false;
 
         return true;
-    };
+    }
 
     reset(byteOffset) {
         this.stream.seek(byteOffset * 8);
         this.next_frame = byteOffset;
         this.sync = true;
-    };
+    }
 }

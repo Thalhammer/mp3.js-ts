@@ -90,17 +90,23 @@ export class Layer3 {
 
         // find main_data of next frame
         var peek = stream.copy();
-        peek.seek(stream.next_frame * 8);
+        var nextHeader = null;
+        try {
+            peek.seek(stream.next_frame * 8);
+            nextHeader = peek.read(16);
+            if ((nextHeader & 0xffe6) === 0xffe2) { // syncword | layer
+                if ((nextHeader & 1) === 0) // protection bit
+                    peek.advance(16); // crc check
 
-        var nextHeader = peek.read(16);
-        if ((nextHeader & 0xffe6) === 0xffe2) { // syncword | layer
-            if ((nextHeader & 1) === 0) // protection bit
-                peek.advance(16); // crc check
-
-            peek.advance(16); // skip the rest of the header
-            next_md_begin = peek.read((nextHeader & 8) ? 9 : 8);
+                peek.advance(16); // skip the rest of the header
+                next_md_begin = peek.read((nextHeader & 8) ? 9 : 8);
+            }
+        } catch (err) {
+            if (err instanceof AV.UnderflowError) {
+                next_md_begin = 0;
+                nextHeader = null;
+            } else throw err;
         }
-
         // find main_data of this frame
         var frame_space = stream.next_frame - stream.nextByte();
 
@@ -141,26 +147,31 @@ export class Layer3 {
         // decode main_data
         this.decodeMainData(ptr, frame, si, nch);
 
-        // preload main_data buffer with up to 511 bytes for next frame(s)
-        if (frame_free >= next_md_begin) {
-            this.memcpy(stream.main_data, 0, stream.stream.stream, stream.next_frame - next_md_begin, next_md_begin);
-            stream.md_len = next_md_begin;
-        } else {
-            if (md_len < si.main_data_begin) {
-                var extra = si.main_data_begin - md_len;
-                if (extra + frame_free > next_md_begin)
-                    extra = next_md_begin - frame_free;
-
-                if (extra < stream.md_len) {
-                    this.memcpy(stream.main_data, 0, stream.main_data, stream.md_len - extra, extra);
-                    stream.md_len = extra;
-                }
+        if (next_md_begin > 0) {
+            // preload main_data buffer with up to 511 bytes for next frame(s)
+            if (frame_free >= next_md_begin) {
+                this.memcpy(stream.main_data, 0, stream.stream.stream, stream.next_frame - next_md_begin, next_md_begin);
+                stream.md_len = next_md_begin;
             } else {
-                stream.md_len = 0;
-            }
+                if (md_len < si.main_data_begin) {
+                    var extra = si.main_data_begin - md_len;
+                    if (extra + frame_free > next_md_begin)
+                        extra = next_md_begin - frame_free;
 
-            this.memcpy(stream.main_data, stream.md_len, stream.stream.stream, stream.next_frame - frame_free, frame_free);
-            stream.md_len += frame_free;
+                    if (extra < stream.md_len) {
+                        this.memcpy(stream.main_data, 0, stream.main_data, stream.md_len - extra, extra);
+                        stream.md_len = extra;
+                    }
+                } else {
+                    stream.md_len = 0;
+                }
+
+                this.memcpy(stream.main_data, stream.md_len, stream.stream.stream, stream.next_frame - frame_free, frame_free);
+                stream.md_len += frame_free;
+            }
+        } else {
+            stream.md_len = 0;
+            stream.main_data.fill(0);
         }
     }
 
@@ -1017,7 +1028,7 @@ export class Layer3 {
                     if (!(modes[sfbi] & tables.I_STEREO))
                         continue;
 
-                        let is_pos = right_ch.scalefac[sfbi];
+                    let is_pos = right_ch.scalefac[sfbi];
 
                     if (is_pos >= 7) {  // illegal intensity position
                         modes[sfbi] &= ~tables.I_STEREO;
