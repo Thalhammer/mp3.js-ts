@@ -23,17 +23,17 @@ export class MP3Stream {
         this.md_len = 0;                               // length of main data
 
         // copy methods from actual stream
-        (this as any).copy = this.stream.copy.bind(this.stream);
-        (this as any).offset = this.stream.offset.bind(this.stream);
-        (this as any).available = this.stream.available.bind(this.stream);
-        (this as any).advance = this.stream.advance.bind(this.stream);
-        (this as any).rewind = this.stream.rewind.bind(this.stream);
-        (this as any).seek = this.stream.seek.bind(this.stream);
-        (this as any).align = this.stream.align.bind(this.stream);
-        (this as any).read = this.stream.read.bind(this.stream);
-        (this as any).peek = this.stream.peek.bind(this.stream);
-        (this as any).readLSB = this.stream.readLSB.bind(this.stream);
-        (this as any).peekLSB = this.stream.peekLSB.bind(this.stream);
+        //(this as any).copy = this.stream.copy.bind(this.stream);
+        //(this as any).offset = this.stream.offset.bind(this.stream);
+        //(this as any).available = this.stream.available.bind(this.stream);
+        //(this as any).advance = this.stream.advance.bind(this.stream);
+        //(this as any).rewind = this.stream.rewind.bind(this.stream);
+        //(this as any).seek = this.stream.seek.bind(this.stream);
+        //(this as any).align = this.stream.align.bind(this.stream);
+        //(this as any).read = this.stream.read.bind(this.stream);
+        //(this as any).peek = this.stream.peek.bind(this.stream);
+        //(this as any).readLSB = this.stream.readLSB.bind(this.stream);
+        //(this as any).peekLSB = this.stream.peekLSB.bind(this.stream);
     }
 
     getU8(offset) {
@@ -79,5 +79,50 @@ export class MP3Stream {
         this.stream.seek(byteOffset * 8);
         this.next_frame = byteOffset;
         this.sync = true;
+    }
+
+    // copy methods from actual stream
+    copy() : AV.Bitstream {
+        return this.stream.copy();
+    }
+
+    offset() : number {
+        return this.stream.offset();
+    }
+
+    available(bits: number) : boolean {
+        return this.stream.available(bits);
+    }
+
+    advance(bits: number) {
+        return this.stream.advance(bits);
+    }
+
+    rewind(bits: number) {
+        return this.stream.rewind(bits);
+    }
+
+    seek(offset: number) {
+        return this.stream.seek(offset);
+    }
+
+    align() {
+        return this.stream.align();
+    }
+
+    read(bits: number, signed?: boolean): any {
+        return this.stream.read(bits, signed);
+    }
+
+    peek(bits: number, signed?: boolean): any {
+        return this.stream.peek(bits, signed);
+    }
+
+    readLSB(bits: number, signed?: boolean): any {
+        return this.stream.readLSB(bits, signed);
+    }
+
+    peekLSB(bits: number, signed?: boolean): any {
+        return this.stream.peekLSB(bits, signed);
     }
 }

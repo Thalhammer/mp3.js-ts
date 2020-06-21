@@ -102,7 +102,7 @@ export class Layer3 {
                 next_md_begin = peek.read((nextHeader & 8) ? 9 : 8);
             }
         } catch (err) {
-            if (err instanceof AV.UnderflowError) {
+            if (err.name == "UnderflowError") {
                 next_md_begin = 0;
                 nextHeader = null;
             } else throw err;

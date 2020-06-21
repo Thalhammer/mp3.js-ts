@@ -31,7 +31,7 @@ export class MP3Decoder extends AV.Decoder {
                     frame.decode(stream);
                     break;
                 } catch (err) {
-                    if (err instanceof AV.UnderflowError)
+                    if (err == "UnderflowError")
                         throw err;
                 }
             }

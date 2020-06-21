@@ -9,13 +9,13 @@ const libraryName = 'mp3-js-ts'
 export default {
   input: `compiled/${libraryName}.js`,
   output: [
-    //{ file: pkg.main, name: camelCase(libraryName), format: 'umd' },
-	  //{ file: pkg.module, format: 'es' },
-	  { file: pkg.iife, format: 'iife', name:"AVMp3" }
+    { file: pkg.main, name: camelCase(libraryName), format: 'umd' },
+	  { file: pkg.module, format: 'es' },
+	  { file: pkg.iife, format: 'iife', name:"AVMp3", globals: { "aurora-js-ts":"AV" } }
   ],
   sourcemap: true,
   // Indicate here external modules you don't wanna include in your bundle (i.e.: 'lodash')
-  external: [],
+  external: ["aurora-js-ts"],
   plugins: [
     // Allow bundling cjs modules (unlike webpack, rollup doesn't understand cjs)
     commonjs(),
