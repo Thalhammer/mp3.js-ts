@@ -16,6 +16,9 @@ export default {
   sourcemap: true,
   // Indicate here external modules you don't wanna include in your bundle (i.e.: 'lodash')
   external: ["aurora-js-ts"],
+  globals: {
+    "aurora-js-ts": "AV"
+  },
   plugins: [
     // Allow bundling cjs modules (unlike webpack, rollup doesn't understand cjs)
     commonjs(),
@@ -26,5 +29,6 @@ export default {
 
     // Resolve source maps to the original source
     sourceMaps()
-  ]
+  ],
+  context: "this"
 }

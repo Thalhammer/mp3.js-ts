@@ -80,6 +80,6 @@
     "zone.js": "^0.8.17"
   },
   "dependencies": {
-    "aurora-js-ts": "file:../aurora.js-ts"
+    "aurora-js-ts": "Thalhammer/aurora.js-ts#master"
   }
 }
