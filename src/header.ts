@@ -1,17 +1,18 @@
 import * as AV from 'aurora-js-ts';
+import { MP3Stream } from './stream';
 
 export class MP3FrameHeader {
 
-    private layer: number = 0; // audio layer (1, 2, or 3)
-    private mode: number = 0; // channel mode (see above)
-    private mode_extension: number = 0; // additional mode info
-    private emphasis: number = 0; // de-emphasis to use (see above)
-    private bitrate: number = 0; // stream bitrate (bps)
-    private samplerate: number = 0; // sampling frequency (Hz)
-    private crc_check: number = 0; // frame CRC accumulator
-    private crc_target: number = 0; // final target CRC checksum
-    private flags: number = 0; // flags (see above)
-    private private_bits: number = 0; // private bits
+    public layer: number = 0; // audio layer (1, 2, or 3)
+    public mode: number = 0; // channel mode (see above)
+    public mode_extension: number = 0; // additional mode info
+    public emphasis: number = 0; // de-emphasis to use (see above)
+    public bitrate: number = 0; // stream bitrate (bps)
+    public samplerate: number = 0; // sampling frequency (Hz)
+    public crc_check: number = 0; // frame CRC accumulator
+    public crc_target: number = 0; // final target CRC checksum
+    public flags: number = 0; // flags (see above)
+    public private_bits: number = 0; // private bits
 
     constructor() { }
 
@@ -116,7 +117,7 @@ export class MP3FrameHeader {
         }
     };
 
-    decode(stream) {
+    decode(stream: MP3Stream) {
         this.flags = 0;
         this.private_bits = 0;
 
@@ -145,7 +146,7 @@ export class MP3FrameHeader {
             this.flags |= MP3FrameHeader.FLAGS.PROTECTION;
 
         // bitrate_index 
-        var index = stream.read(4);
+        let index = stream.read(4);
         if (index === 15)
             throw new Error('Invalid bitrate');
 
@@ -199,11 +200,11 @@ export class MP3FrameHeader {
             this.crc_target = stream.read(16);
     };
 
-    static decode(stream) {
+    static decode(stream : MP3Stream) : MP3FrameHeader {
         // synchronize
         var ptr = stream.next_frame;
         var syncing = true;
-        var header = null;
+        let header: MP3FrameHeader = null;
 
         while (syncing) {
             syncing = false;

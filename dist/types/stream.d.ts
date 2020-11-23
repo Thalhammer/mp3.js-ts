@@ -1,12 +1,12 @@
 import * as AV from 'aurora-js-ts';
 export declare class MP3Stream {
-    private stream;
-    private sync;
-    private freerate;
-    private this_frame;
-    private next_frame;
-    private main_data;
-    private md_len;
+    stream: AV.Bitstream;
+    sync: boolean;
+    freerate: number;
+    this_frame: number;
+    next_frame: number;
+    main_data: Uint8Array;
+    md_len: number;
     constructor(stream: AV.Bitstream);
     getU8(offset: any): number;
     getU16(offset: any): number;

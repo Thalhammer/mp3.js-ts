@@ -2,14 +2,14 @@ import * as AV from 'aurora-js-ts';
 import {MP3FrameHeader} from './header';
 
 export class MP3Stream {
-    private stream: AV.Bitstream;                     // actual bitstream
-    private sync: boolean;                        // stream sync found
-    private freerate: number;                        // free bitrate (fixed)
-    private this_frame: number;   // start of current frame
-    private next_frame: number;   // start of next frame
+    public stream: AV.Bitstream;                     // actual bitstream
+    public sync: boolean;                        // stream sync found
+    public freerate: number;                        // free bitrate (fixed)
+    public this_frame: number;   // start of current frame
+    public next_frame: number;   // start of next frame
 
-    private main_data: Uint8Array; // actual audio data
-    private md_len: number;                               // length of main data
+    public main_data: Uint8Array; // actual audio data
+    public md_len: number;                               // length of main data
 
 
     constructor(stream: AV.Bitstream) {

@@ -19,9 +19,9 @@ export class MP3Decoder extends AV.Decoder {
     };
     
     readChunk() {
-        var stream = this.mp3_stream;
-        var frame = this.frame;
-        var synth = this.synth;
+        let stream = this.mp3_stream;
+        let frame = this.frame;
+        let synth = this.synth;
 
         // if we just seeked, we may start getting errors involving the frame reservoir,
         // so keep going until we successfully decode a frame
@@ -38,7 +38,16 @@ export class MP3Decoder extends AV.Decoder {
             
             this.seeking = false;
         } else {
-            frame.decode(stream);
+            const sync = this.mp3_stream.sync;
+            const next_frame = this.mp3_stream.next_frame;
+            try {
+                frame.decode(stream);
+            } catch(err) {
+                // Reset if we fail while decoding a frame
+                this.mp3_stream.sync = sync;
+                this.mp3_stream.next_frame = next_frame;
+                throw err;
+            }
         }
         
         synth.frame(frame);

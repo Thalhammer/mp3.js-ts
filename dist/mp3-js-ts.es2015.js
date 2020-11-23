@@ -5872,7 +5872,17 @@ var MP3Decoder = /** @class */ (function (_super) {
             this.seeking = false;
         }
         else {
-            frame.decode(stream);
+            var sync = this.mp3_stream.sync;
+            var next_frame = this.mp3_stream.next_frame;
+            try {
+                frame.decode(stream);
+            }
+            catch (err) {
+                // Reset if we fail while decoding a frame
+                this.mp3_stream.sync = sync;
+                this.mp3_stream.next_frame = next_frame;
+                throw err;
+            }
         }
         synth.frame(frame);
         // interleave samples

@@ -1,6 +1,8 @@
 import * as tables from './tables';
 import { MP3FrameHeader } from './header';
 import * as utils from './utils';
+import { MP3Frame } from './frame';
+import { MP3Stream } from './stream';
 
 
 // possible quantization per subband table
@@ -96,7 +98,7 @@ export class Layer2 {
     }
 
 
-    decode(stream, frame) {
+    decode(stream: MP3Stream, frame: MP3Frame) {
         var header = frame.header;
         var nch = header.nchannels();
         var index;

@@ -4,6 +4,8 @@ import { MP3FrameHeader } from './header';
 import * as huffman from './huffman';
 import { IMDCT } from './imdct';
 import { makeArray } from './utils';
+import { MP3Stream } from './stream';
+import { MP3Frame } from './frame';
 
 export class MP3SideInfo {
     public main_data_begin = null;
@@ -60,7 +62,7 @@ export class Layer3 {
 
     }
 
-    decode(stream, frame) {
+    decode(stream: MP3Stream, frame: MP3Frame) {
         var header = frame.header;
         var next_md_begin = 0;
         var md_len = 0;

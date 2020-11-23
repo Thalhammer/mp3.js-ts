@@ -1,3 +1,5 @@
+import { MP3Stream } from './stream';
+import { MP3Frame } from './frame';
 export declare class MP3SideInfo {
     main_data_begin: any;
     private_bits: any;
@@ -34,7 +36,7 @@ export declare class Layer3 {
     private tmp;
     private tmp2;
     constructor();
-    decode(stream: any, frame: any): void;
+    decode(stream: MP3Stream, frame: MP3Frame): void;
     memcpy(dst: any, dstOffset: any, pSrc: any, srcOffset: any, length: any): any;
     sideInfo(stream: any, nch: any, lsf: any): {
         si: MP3SideInfo;

@@ -1,6 +1,8 @@
 import * as tables from './tables';
 import { MP3FrameHeader } from './header';
 import * as utils from './utils';
+import { MP3Stream } from './stream';
+import { MP3Frame } from './frame';
 
 // linear scaling table
 const LINEAR_TABLE = new Float32Array([
@@ -20,7 +22,7 @@ export class Layer1 {
         this.scalefactor = utils.makeArray([2, 32], Uint8Array);
     }
 
-    decode(stream, frame) {
+    decode(stream: MP3Stream, frame: MP3Frame) {
         var header = frame.header;
         var nch = header.nchannels();
 
