@@ -1,3 +1,3 @@
 export class config {
-    static HTTP_BASE = "http://localhost:8000";
+	static HTTP_BASE = "http://localhost:8000";
 };

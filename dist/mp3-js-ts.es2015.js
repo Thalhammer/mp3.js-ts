@@ -1,4 +1,4 @@
-import { Base, Bitstream, Buffer, Decoder, Demuxer, Stream, UnderflowError } from 'aurora-js-ts';
+import * as AV from 'aurora-js-ts';
 
 var MP3FrameHeader = /** @class */ (function () {
     function MP3FrameHeader() {
@@ -13,106 +13,6 @@ var MP3FrameHeader = /** @class */ (function () {
         this.flags = 0; // flags (see above)
         this.private_bits = 0; // private bits
     }
-    MP3FrameHeader.prototype.copy = function () {
-        var clone = new MP3FrameHeader();
-        var keys = Object.keys(this);
-        for (var key in keys) {
-            clone[key] = this[key];
-        }
-        return clone;
-    };
-    MP3FrameHeader.prototype.nchannels = function () {
-        return this.mode === 0 ? 1 : 2;
-    };
-    
-    MP3FrameHeader.prototype.nbsamples = function () {
-        return (this.layer === 1 ? 12 : ((this.layer === 3 && (this.flags & MP3FrameHeader.FLAGS.LSF_EXT)) ? 18 : 36));
-    };
-    
-    MP3FrameHeader.prototype.framesize = function () {
-        if (this.bitrate === 0)
-            return null;
-        var padding = (this.flags & MP3FrameHeader.FLAGS.PADDING ? 1 : 0);
-        switch (this.layer) {
-            case 1:
-                var size = (this.bitrate * 12) / this.samplerate | 0;
-                return (size + padding) * 4;
-            case 2:
-                var size = (this.bitrate * 144) / this.samplerate | 0;
-                return size + padding;
-            case 3:
-            default:
-                var lsf = this.flags & MP3FrameHeader.FLAGS.LSF_EXT ? 1 : 0;
-                var size = (this.bitrate * 144) / (this.samplerate << lsf) | 0;
-                return size + padding;
-        }
-    };
-    
-    MP3FrameHeader.prototype.decode = function (stream) {
-        this.flags = 0;
-        this.private_bits = 0;
-        // syncword 
-        stream.advance(11);
-        // MPEG 2.5 indicator (really part of syncword) 
-        if (stream.read(1) === 0)
-            this.flags |= MP3FrameHeader.FLAGS.MPEG_2_5_EXT;
-        // ID 
-        if (stream.read(1) === 0) {
-            this.flags |= MP3FrameHeader.FLAGS.LSF_EXT;
-        }
-        else if (this.flags & MP3FrameHeader.FLAGS.MPEG_2_5_EXT) {
-            throw new UnderflowError(); // LOSTSYNC
-        }
-        // layer 
-        this.layer = 4 - stream.read(2);
-        if (this.layer === 4)
-            throw new Error('Invalid layer');
-        // protection_bit 
-        if (stream.read(1) === 0)
-            this.flags |= MP3FrameHeader.FLAGS.PROTECTION;
-        // bitrate_index 
-        var index = stream.read(4);
-        if (index === 15)
-            throw new Error('Invalid bitrate');
-        if (this.flags & MP3FrameHeader.FLAGS.LSF_EXT) {
-            this.bitrate = MP3FrameHeader.BITRATES[3 + (this.layer >> 1)][index];
-        }
-        else {
-            this.bitrate = MP3FrameHeader.BITRATES[this.layer - 1][index];
-        }
-        // sampling_frequency 
-        index = stream.read(2);
-        if (index === 3)
-            throw new Error('Invalid sampling frequency');
-        this.samplerate = MP3FrameHeader.SAMPLERATES[index];
-        if (this.flags & MP3FrameHeader.FLAGS.LSF_EXT) {
-            this.samplerate /= 2;
-            if (this.flags & MP3FrameHeader.FLAGS.MPEG_2_5_EXT)
-                this.samplerate /= 2;
-        }
-        // padding_bit 
-        if (stream.read(1))
-            this.flags |= MP3FrameHeader.FLAGS.PADDING;
-        // private_bit 
-        if (stream.read(1))
-            this.private_bits |= MP3FrameHeader.PRIVATE.HEADER;
-        // mode 
-        this.mode = 3 - stream.read(2);
-        // mode_extension 
-        this.mode_extension = stream.read(2);
-        // copyright 
-        if (stream.read(1))
-            this.flags |= MP3FrameHeader.FLAGS.COPYRIGHT;
-        // original/copy 
-        if (stream.read(1))
-            this.flags |= MP3FrameHeader.FLAGS.ORIGINAL;
-        // emphasis 
-        this.emphasis = stream.read(2);
-        // crc_check 
-        if (this.flags & MP3FrameHeader.FLAGS.PROTECTION)
-            this.crc_target = stream.read(16);
-    };
-    
     MP3FrameHeader.decode = function (stream) {
         // synchronize
         var ptr = stream.next_frame;
@@ -123,19 +23,20 @@ var MP3FrameHeader = /** @class */ (function () {
             if (stream.sync) {
                 if (!stream.available(MP3FrameHeader.BUFFER_GUARD)) {
                     stream.next_frame = ptr;
-                    throw new UnderflowError();
+                    throw new AV.UnderflowError();
                 }
                 else if (!(stream.getU8(ptr) === 0xff && (stream.getU8(ptr + 1) & 0xe0) === 0xe0)) {
                     // mark point where frame sync word was expected
                     stream.this_frame = ptr;
                     stream.next_frame = ptr + 1;
-                    throw new UnderflowError(); // LOSTSYNC
+                    throw new AV.UnderflowError(); // LOSTSYNC
                 }
             }
             else {
                 stream.seek(ptr * 8);
-                if (!stream.doSync())
-                    throw new UnderflowError();
+                if (!stream.doSync()) {
+                    throw new AV.UnderflowError();
+                }
                 ptr = stream.nextByte();
             }
             // begin processing
@@ -145,24 +46,26 @@ var MP3FrameHeader = /** @class */ (function () {
             header = new MP3FrameHeader();
             header.decode(stream);
             if (header.bitrate === 0) {
-                if (stream.freerate === 0 || !stream.sync || (header.layer === 3 && stream.freerate > 640000))
+                if (stream.freerate === 0 || !stream.sync || (header.layer === 3 && stream.freerate > 640000)) {
                     MP3FrameHeader.free_bitrate(stream, header);
+                }
                 header.bitrate = stream.freerate;
                 header.flags |= MP3FrameHeader.FLAGS.FREEFORMAT;
             }
             // calculate beginning of next frame
             var pad_slot = (header.flags & MP3FrameHeader.FLAGS.PADDING) ? 1 : 0;
+            var N = void 0;
             if (header.layer === 1) {
-                var N = (((12 * header.bitrate / header.samplerate) << 0) + pad_slot) * 4;
+                N = (((12 * header.bitrate / header.samplerate) << 0) + pad_slot) * 4;
             }
             else {
                 var slots_per_frame = (header.layer === 3 && (header.flags & MP3FrameHeader.FLAGS.LSF_EXT)) ? 72 : 144;
-                var N = ((slots_per_frame * header.bitrate / header.samplerate) << 0) + pad_slot;
+                N = ((slots_per_frame * header.bitrate / header.samplerate) << 0) + pad_slot;
             }
             // verify there is enough data left in buffer to decode this frame
             if (!stream.available(N + MP3FrameHeader.BUFFER_GUARD)) {
                 stream.next_frame = stream.this_frame;
-                throw new UnderflowError();
+                throw new AV.UnderflowError();
             }
             stream.next_frame = stream.this_frame + N;
             if (!stream.sync) {
@@ -180,9 +83,9 @@ var MP3FrameHeader = /** @class */ (function () {
         header.flags |= MP3FrameHeader.FLAGS.INCOMPLETE;
         return header;
     };
-    
     MP3FrameHeader.free_bitrate = function (stream, header) {
-        var pad_slot = header.flags & MP3FrameHeader.FLAGS.PADDING ? 1 : 0, slots_per_frame = header.layer === 3 && header.flags & MP3FrameHeader.FLAGS.LSF_EXT ? 72 : 144;
+        var pad_slot = header.flags & MP3FrameHeader.FLAGS.PADDING ? 1 : 0;
+        var slots_per_frame = header.layer === 3 && header.flags & MP3FrameHeader.FLAGS.LSF_EXT ? 72 : 144;
         var start = stream.offset();
         var rate = 0;
         while (stream.doSync()) {
@@ -196,17 +99,124 @@ var MP3FrameHeader = /** @class */ (function () {
                 else {
                     rate = header.samplerate * (N - pad_slot + 1) / slots_per_frame / 1000 | 0;
                 }
-                if (rate >= 8)
+                if (rate >= 8) {
                     break;
+                }
             }
             stream.advance(8);
         }
         stream.seek(start);
-        if (rate < 8 || (header.layer === 3 && rate > 640))
-            throw new UnderflowError(); // LOSTSYNC
+        if (rate < 8 || (header.layer === 3 && rate > 640)) {
+            throw new AV.UnderflowError();
+        } // LOSTSYNC
         stream.freerate = rate * 1000;
     };
-    
+    MP3FrameHeader.prototype.copy = function () {
+        var clone = new MP3FrameHeader();
+        var keys = Object.keys(this);
+        for (var key in keys) {
+            if (keys.hasOwnProperty(key)) {
+                clone[key] = this[key];
+            }
+        }
+        return clone;
+    };
+    MP3FrameHeader.prototype.nchannels = function () {
+        return this.mode === 0 ? 1 : 2;
+    };
+    MP3FrameHeader.prototype.nbsamples = function () {
+        return (this.layer === 1 ? 12 : ((this.layer === 3 && (this.flags & MP3FrameHeader.FLAGS.LSF_EXT)) ? 18 : 36));
+    };
+    MP3FrameHeader.prototype.framesize = function () {
+        if (this.bitrate === 0) {
+            return null;
+        }
+        var padding = (this.flags & MP3FrameHeader.FLAGS.PADDING ? 1 : 0);
+        switch (this.layer) {
+            case 1:
+                return (((this.bitrate * 12) / this.samplerate | 0) + padding) * 4;
+            case 2:
+                return ((this.bitrate * 144) / this.samplerate | 0) + padding;
+            case 3:
+            default:
+                return ((this.bitrate * 144) / (this.samplerate << (this.flags & MP3FrameHeader.FLAGS.LSF_EXT ? 1 : 0)) | 0) + padding;
+        }
+    };
+    MP3FrameHeader.prototype.decode = function (stream) {
+        this.flags = 0;
+        this.private_bits = 0;
+        // syncword
+        stream.advance(11);
+        // MPEG 2.5 indicator (really part of syncword)
+        if (stream.read(1) === 0) {
+            this.flags |= MP3FrameHeader.FLAGS.MPEG_2_5_EXT;
+        }
+        // ID
+        if (stream.read(1) === 0) {
+            this.flags |= MP3FrameHeader.FLAGS.LSF_EXT;
+        }
+        else if (this.flags & MP3FrameHeader.FLAGS.MPEG_2_5_EXT) {
+            throw new AV.UnderflowError(); // LOSTSYNC
+        }
+        // layer
+        this.layer = 4 - stream.read(2);
+        if (this.layer === 4) {
+            throw new Error('Invalid layer');
+        }
+        // protection_bit
+        if (stream.read(1) === 0) {
+            this.flags |= MP3FrameHeader.FLAGS.PROTECTION;
+        }
+        // bitrate_index
+        var index = stream.read(4);
+        if (index === 15) {
+            throw new Error('Invalid bitrate');
+        }
+        if (this.flags & MP3FrameHeader.FLAGS.LSF_EXT) {
+            this.bitrate = MP3FrameHeader.BITRATES[3 + (this.layer >> 1)][index];
+        }
+        else {
+            this.bitrate = MP3FrameHeader.BITRATES[this.layer - 1][index];
+        }
+        // sampling_frequency
+        index = stream.read(2);
+        if (index === 3) {
+            throw new Error('Invalid sampling frequency');
+        }
+        this.samplerate = MP3FrameHeader.SAMPLERATES[index];
+        if (this.flags & MP3FrameHeader.FLAGS.LSF_EXT) {
+            this.samplerate /= 2;
+            if (this.flags & MP3FrameHeader.FLAGS.MPEG_2_5_EXT) {
+                this.samplerate /= 2;
+            }
+        }
+        // padding_bit
+        if (stream.read(1)) {
+            this.flags |= MP3FrameHeader.FLAGS.PADDING;
+        }
+        // private_bit
+        if (stream.read(1)) {
+            this.private_bits |= MP3FrameHeader.PRIVATE.HEADER;
+        }
+        // mode
+        this.mode = 3 - stream.read(2);
+        // mode_extension
+        this.mode_extension = stream.read(2);
+        // copyright
+        if (stream.read(1)) {
+            this.flags |= MP3FrameHeader.FLAGS.COPYRIGHT;
+        }
+        // original/copy
+        if (stream.read(1)) {
+            this.flags |= MP3FrameHeader.FLAGS.ORIGINAL;
+        }
+        // emphasis
+        this.emphasis = stream.read(2);
+        // crc_check
+        if (this.flags & MP3FrameHeader.FLAGS.PROTECTION) {
+            this.crc_target = stream.read(16);
+        }
+    };
     MP3FrameHeader.BITRATES = [
         // MPEG-1
         [0, 32000, 64000, 96000, 128000, 160000, 192000, 224000,
@@ -269,17 +279,17 @@ var MP3Stream = /** @class */ (function () {
         this.main_data = new Uint8Array(MP3FrameHeader.BUFFER_MDLEN); // actual audio data
         this.md_len = 0; // length of main data
         // copy methods from actual stream
-        //(this as any).copy = this.stream.copy.bind(this.stream);
-        //(this as any).offset = this.stream.offset.bind(this.stream);
-        //(this as any).available = this.stream.available.bind(this.stream);
-        //(this as any).advance = this.stream.advance.bind(this.stream);
-        //(this as any).rewind = this.stream.rewind.bind(this.stream);
-        //(this as any).seek = this.stream.seek.bind(this.stream);
-        //(this as any).align = this.stream.align.bind(this.stream);
-        //(this as any).read = this.stream.read.bind(this.stream);
-        //(this as any).peek = this.stream.peek.bind(this.stream);
-        //(this as any).readLSB = this.stream.readLSB.bind(this.stream);
-        //(this as any).peekLSB = this.stream.peekLSB.bind(this.stream);
+        // (this as any).copy = this.stream.copy.bind(this.stream);
+        // (this as any).offset = this.stream.offset.bind(this.stream);
+        // (this as any).available = this.stream.available.bind(this.stream);
+        // (this as any).advance = this.stream.advance.bind(this.stream);
+        // (this as any).rewind = this.stream.rewind.bind(this.stream);
+        // (this as any).seek = this.stream.seek.bind(this.stream);
+        // (this as any).align = this.stream.align.bind(this.stream);
+        // (this as any).read = this.stream.read.bind(this.stream);
+        // (this as any).peek = this.stream.peek.bind(this.stream);
+        // (this as any).readLSB = this.stream.readLSB.bind(this.stream);
+        // (this as any).peekLSB = this.stream.peekLSB.bind(this.stream);
     }
     MP3Stream.prototype.getU8 = function (offset) {
         var stream = this.stream.stream;
@@ -307,8 +317,9 @@ var MP3Stream = /** @class */ (function () {
         while (this.stream.available(16) && !(stream.peekUInt8(0) === 0xff && (stream.peekUInt8(1) & 0xe0) === 0xe0)) {
             this.stream.advance(8);
         }
-        if (!this.stream.available(MP3FrameHeader.BUFFER_GUARD))
+        if (!this.stream.available(MP3FrameHeader.BUFFER_GUARD)) {
             return false;
+        }
         return true;
     };
     MP3Stream.prototype.reset = function (byteOffset) {
@@ -354,12 +365,14 @@ var MP3Stream = /** @class */ (function () {
 }());
 
 function makeArray(lengths, Type) {
-    if (!Type)
+    if (!Type) {
         Type = Float64Array;
+    }
     if (lengths.length === 1) {
         return new Type(lengths[0]);
     }
-    var ret = [], len = lengths[0];
+    var ret = [];
+    var len = lengths[0];
     for (var j = 0; j < len; j++) {
         ret[j] = makeArray(lengths.slice(1), Type);
     }
@@ -619,14 +632,6 @@ var IS_TABLE = new Float32Array([
     1.000000000
 ]);
 /*
- * coefficients for LSF intensity stereo processing
- * derived from section 2.4.3.2 of ISO/IEC 13818-3
- *
- * IS_LSF_TABLE[0][i] = (1 / sqrt(sqrt(2)))^(i + 1)
- * IS_LSF_TABLE[1][i] = (1 /      sqrt(2)) ^(i + 1)
- */
-
-/*
  * scalefactor bit lengths
  * derived from section 2.4.2.7 of ISO/IEC 11172-3
  */
@@ -682,21 +687,24 @@ var Layer1 = /** @class */ (function () {
             header.flags |= MP3FrameHeader.FLAGS.I_STEREO;
             bound = 4 + header.mode_extension * 4;
         }
+        if (header.flags & MP3FrameHeader.FLAGS.PROTECTION) ;
+        // decode bit allocations
         var allocation = this.allocation;
         for (var sb = 0; sb < bound; sb++) {
             for (var ch = 0; ch < nch; ch++) {
                 var nb = stream.read(4);
-                if (nb === 15)
-                    throw new Error("forbidden bit allocation value");
+                if (nb === 15) {
+                    throw new Error('forbidden bit allocation value');
+                }
                 allocation[ch][sb] = nb ? nb + 1 : 0;
             }
         }
         for (var sb = bound; sb < 32; sb++) {
             var nb = stream.read(4);
-            if (nb === 15)
-                throw new Error("forbidden bit allocation value");
-            allocation[0][sb] =
-                allocation[1][sb] = nb ? nb + 1 : 0;
+            if (nb === 15) {
+                throw new Error('forbidden bit allocation value');
+            }
+            allocation[0][sb] = allocation[1][sb] = nb ? nb + 1 : 0;
         }
         // decode scalefactors
         var scalefactor = this.scalefactor;
@@ -736,7 +744,6 @@ var Layer1 = /** @class */ (function () {
             }
         }
     };
-    
     Layer1.prototype.sample = function (stream, nb) {
         var sample = stream.read(nb);
         // invert most significant bit, and form a 2's complement sample
@@ -748,7 +755,6 @@ var Layer1 = /** @class */ (function () {
         sample += 1 >> (nb - 1);
         return sample * LINEAR_TABLE[nb - 2];
     };
-    
     return Layer1;
 }());
 
@@ -850,15 +856,19 @@ var Layer2 = /** @class */ (function () {
                  * ISO/IEC 11172-3 does not allow single channel mode for 224, 256,
                  * 320, or 384 kbps bitrates in Layer II.
                  */
-                if (bitrate_per_channel > 192000)
+                if (bitrate_per_channel > 192000) {
                     throw new Error('bad bitrate/mode combination');
+                }
             }
-            if (bitrate_per_channel <= 48000)
+            if (bitrate_per_channel <= 48000) {
                 index = header.samplerate === 32000 ? 3 : 2;
-            else if (bitrate_per_channel <= 80000)
+            }
+            else if (bitrate_per_channel <= 80000) {
                 index = 0;
-            else
+            }
+            else {
                 index = header.samplerate === 48000 ? 0 : 1;
+            }
         }
         var sblimit = SBQUANT[index].sblimit;
         var offsets = SBQUANT[index].offsets;
@@ -867,47 +877,50 @@ var Layer2 = /** @class */ (function () {
             header.flags |= MP3FrameHeader.FLAGS.I_STEREO;
             bound = 4 + header.mode_extension * 4;
         }
-        if (bound > sblimit)
+        if (bound > sblimit) {
             bound = sblimit;
+        }
         // decode bit allocations
         var allocation = this.allocation;
         for (var sb = 0; sb < bound; sb++) {
             var nbal = BITALLOC[offsets[sb]].nbal;
-            for (var ch = 0; ch < nch; ch++)
+            for (var ch = 0; ch < nch; ch++) {
                 allocation[ch][sb] = stream.read(nbal);
+            }
         }
         for (var sb = bound; sb < sblimit; sb++) {
             var nbal = BITALLOC[offsets[sb]].nbal;
-            allocation[0][sb] =
-                allocation[1][sb] = stream.read(nbal);
+            allocation[0][sb] = allocation[1][sb] = stream.read(nbal);
         }
         // decode scalefactor selection info
         var scfsi = this.scfsi;
         for (var sb = 0; sb < sblimit; sb++) {
             for (var ch = 0; ch < nch; ch++) {
-                if (allocation[ch][sb])
+                if (allocation[ch][sb]) {
                     scfsi[ch][sb] = stream.read(2);
+                }
             }
         }
+        if (header.flags & MP3FrameHeader.FLAGS.PROTECTION) ;
+        // decode scalefactors
         var scalefactor = this.scalefactor;
         for (var sb = 0; sb < sblimit; sb++) {
             for (var ch = 0; ch < nch; ch++) {
                 if (allocation[ch][sb]) {
                     scalefactor[ch][sb][0] = stream.read(6);
-                    switch (scfsi[ch][sb]) {
-                        case 2:
-                            scalefactor[ch][sb][2] =
-                                scalefactor[ch][sb][1] = scalefactor[ch][sb][0];
-                            break;
-                        case 0:
-                            scalefactor[ch][sb][1] = stream.read(6);
-                        // fall through
-                        case 1:
-                        case 3:
-                            scalefactor[ch][sb][2] = stream.read(6);
+                    if (scfsi[ch][sb] === 0) {
+                        scalefactor[ch][sb][1] = stream.read(6);
+                        scalefactor[ch][sb][2] = stream.read(6);
                     }
-                    if (scfsi[ch][sb] & 1)
+                    else if (scfsi[ch][sb] === 1 || scfsi[ch][sb] === 3) {
+                        scalefactor[ch][sb][2] = stream.read(6);
+                    }
+                    else if (scfsi[ch][sb] === 2) {
+                        scalefactor[ch][sb][2] = scalefactor[ch][sb][1] = scalefactor[ch][sb][0];
+                    }
+                    if (scfsi[ch][sb] & 1) {
                         scalefactor[ch][sb][1] = scalefactor[ch][sb][scfsi[ch][sb] - 1];
+                    }
                     /*
                      * Scalefactor index 63 does not appear in Table B.1 of
                      * ISO/IEC 11172-3. Nonetheless, other implementations accept it,
@@ -3842,7 +3855,6 @@ var Layer3 = /** @class */ (function () {
     Layer3.prototype.decode = function (stream, frame) {
         var header = frame.header;
         var next_md_begin = 0;
-        var md_len = 0;
         var nch = header.nchannels();
         var si_len = (header.flags & MP3FrameHeader.FLAGS.LSF_EXT) ? (nch === 1 ? 9 : 17) : (nch === 1 ? 17 : 32);
         // check frame sanity
@@ -3851,8 +3863,11 @@ var Layer3 = /** @class */ (function () {
             throw new Error('Bad frame length');
         }
         // check CRC word
+        if (header.flags & MP3FrameHeader.FLAGS.PROTECTION) ;
+        // decode frame side information
         var sideInfo = this.sideInfo(stream, nch, header.flags & MP3FrameHeader.FLAGS.LSF_EXT);
         var si = sideInfo.si;
+        sideInfo.data_bitlen;
         var priv_bitlen = sideInfo.priv_bitlen;
         header.flags |= priv_bitlen;
         header.private_bits |= si.private_bits;
@@ -3863,24 +3878,27 @@ var Layer3 = /** @class */ (function () {
             peek.seek(stream.next_frame * 8);
             nextHeader = peek.read(16);
             if ((nextHeader & 0xffe6) === 0xffe2) { // syncword | layer
-                if ((nextHeader & 1) === 0) // protection bit
+                if ((nextHeader & 1) === 0) { // protection bit
                     peek.advance(16); // crc check
+                }
                 peek.advance(16); // skip the rest of the header
                 next_md_begin = peek.read((nextHeader & 8) ? 9 : 8);
             }
         }
         catch (err) {
-            if (err.name == "UnderflowError") {
+            if (err.name === 'UnderflowError') {
                 next_md_begin = 0;
                 nextHeader = null;
             }
-            else
+            else {
                 throw err;
+            }
         }
         // find main_data of this frame
         var frame_space = stream.next_frame - stream.nextByte();
-        if (next_md_begin > si.main_data_begin + frame_space)
+        if (next_md_begin > si.main_data_begin + frame_space) {
             next_md_begin = 0;
+        }
         var md_len = si.main_data_begin + frame_space - next_md_begin;
         var frame_used = 0;
         var ptr;
@@ -3897,13 +3915,13 @@ var Layer3 = /** @class */ (function () {
                 var old_md_len = stream.md_len;
                 if (md_len > si.main_data_begin) {
                     if (stream.md_len + md_len - si.main_data_begin > MP3FrameHeader.BUFFER_MDLEN) {
-                        throw new Error("Assertion failed: (stream.md_len + md_len - si.main_data_begin <= MAD_MP3FrameHeader.BUFFER_MDLEN)");
+                        throw new Error('Assertion failed: (stream.md_len + md_len - si.main_data_begin <= MAD_MP3FrameHeader.BUFFER_MDLEN)');
                     }
                     frame_used = md_len - si.main_data_begin;
                     this.memcpy(stream.main_data, stream.md_len, stream.stream.stream, stream.nextByte(), frame_used);
                     stream.md_len += frame_used;
                 }
-                ptr = new Bitstream(Stream.fromBuffer(new Buffer(stream.main_data)));
+                ptr = new AV.Bitstream(AV.Stream.fromBuffer(new AV.Buffer(stream.main_data)));
                 ptr.advance((old_md_len - si.main_data_begin) * 8);
             }
         }
@@ -3919,8 +3937,9 @@ var Layer3 = /** @class */ (function () {
             else {
                 if (md_len < si.main_data_begin) {
                     var extra = si.main_data_begin - md_len;
-                    if (extra + frame_free > next_md_begin)
+                    if (extra + frame_free > next_md_begin) {
                         extra = next_md_begin - frame_free;
+                    }
                     if (extra < stream.md_len) {
                         this.memcpy(stream.main_data, 0, stream.main_data, stream.md_len - extra, extra);
                         stream.md_len = extra;
@@ -3940,10 +3959,12 @@ var Layer3 = /** @class */ (function () {
     };
     Layer3.prototype.memcpy = function (dst, dstOffset, pSrc, srcOffset, length) {
         var subarr;
-        if (pSrc.subarray)
+        if (pSrc.subarray) {
             subarr = pSrc.subarray(srcOffset, srcOffset + length);
-        else
+        }
+        else {
             subarr = pSrc.peekBuffer(srcOffset - pSrc.offset, length).data;
+        }
         // oh my, memcpy actually exists in JavaScript?
         dst.set(subarr, dstOffset);
         return dst;
@@ -3957,8 +3978,9 @@ var Layer3 = /** @class */ (function () {
         var ngr = 1;
         if (!lsf) {
             ngr = 2;
-            for (var ch = 0; ch < nch; ++ch)
+            for (var ch = 0; ch < nch; ++ch) {
                 si.scfsi[ch] = stream.read(4);
+            }
         }
         for (var gr = 0; gr < ngr; gr++) {
             var granule = si.gr[gr];
@@ -3969,31 +3991,39 @@ var Layer3 = /** @class */ (function () {
                 channel.global_gain = stream.read(8);
                 channel.scalefac_compress = stream.read(lsf ? 9 : 4);
                 data_bitlen += channel.part2_3_length;
-                if (channel.big_values > 288)
+                if (channel.big_values > 288) {
                     throw new Error('bad big_values count');
+                }
                 channel.flags = 0;
                 // window_switching_flag
                 if (stream.read(1)) {
                     channel.block_type = stream.read(2);
-                    if (channel.block_type === 0)
+                    if (channel.block_type === 0) {
                         throw new Error('reserved block_type');
-                    if (!lsf && channel.block_type === 2 && si.scfsi[ch])
+                    }
+                    if (!lsf && channel.block_type === 2 && si.scfsi[ch]) {
                         throw new Error('bad scalefactor selection info');
+                    }
                     channel.region0_count = 7;
                     channel.region1_count = 36;
-                    if (stream.read(1))
+                    if (stream.read(1)) {
                         channel.flags |= MIXED_BLOCK_FLAG;
-                    else if (channel.block_type === 2)
+                    }
+                    else if (channel.block_type === 2) {
                         channel.region0_count = 8;
-                    for (var i = 0; i < 2; i++)
+                    }
+                    for (var i = 0; i < 2; i++) {
                         channel.table_select[i] = stream.read(5);
-                    for (var i = 0; i < 3; i++)
+                    }
+                    for (var i = 0; i < 3; i++) {
                         channel.subblock_gain[i] = stream.read(3);
+                    }
                 }
                 else {
                     channel.block_type = 0;
-                    for (var i = 0; i < 3; i++)
+                    for (var i = 0; i < 3; i++) {
                         channel.table_select[i] = stream.read(5);
+                    }
                     channel.region0_count = stream.read(4);
                     channel.region1_count = stream.read(3);
                 }
@@ -4010,23 +4040,24 @@ var Layer3 = /** @class */ (function () {
     Layer3.prototype.decodeMainData = function (stream, frame, si, nch) {
         var header = frame.header;
         var sfreq = header.samplerate;
-        if (header.flags & MP3FrameHeader.FLAGS.MPEG_2_5_EXT)
+        if (header.flags & MP3FrameHeader.FLAGS.MPEG_2_5_EXT) {
             sfreq *= 2;
+        }
         // 48000 => 0, 44100 => 1, 32000 => 2,
         // 24000 => 3, 22050 => 4, 16000 => 5
         var sfreqi = ((sfreq >> 7) & 0x000f) + ((sfreq >> 15) & 0x0001) - 8;
-        if (header.flags & MP3FrameHeader.FLAGS.MPEG_2_5_EXT)
+        if (header.flags & MP3FrameHeader.FLAGS.MPEG_2_5_EXT) {
             sfreqi += 3;
+        }
         // scalefactors, Huffman decoding, requantization
         var ngr = (header.flags & MP3FrameHeader.FLAGS.LSF_EXT) ? 1 : 2;
         var xr = this.xr;
         for (var gr = 0; gr < ngr; ++gr) {
             var granule = si.gr[gr];
             var sfbwidth = [];
-            var l = 0;
             for (var ch = 0; ch < nch; ++ch) {
                 var channel = granule.ch[ch];
-                var part2_length;
+                var part2_length = void 0;
                 sfbwidth[ch] = SFBWIDTH_TABLE[sfreqi].l;
                 if (channel.block_type === 2) {
                     sfbwidth[ch] = (channel.flags & MIXED_BLOCK_FLAG) ? SFBWIDTH_TABLE[sfreqi].m : SFBWIDTH_TABLE[sfreqi].s;
@@ -4040,14 +4071,15 @@ var Layer3 = /** @class */ (function () {
                 this.huffmanDecode(stream, xr[ch], channel, sfbwidth[ch], part2_length);
             }
             // joint stereo processing
-            if (header.mode === MP3FrameHeader.MODE.JOINT_STEREO && header.mode_extension !== 0)
+            if (header.mode === MP3FrameHeader.MODE.JOINT_STEREO && header.mode_extension !== 0) {
                 this.stereo(xr, si.gr, gr, header, sfbwidth[0]);
+            }
             // reordering, alias reduction, IMDCT, overlap-add, frequency inversion
             for (var ch = 0; ch < nch; ch++) {
                 var channel = granule.ch[ch];
                 var sample = frame.sbsample[ch].slice(18 * gr);
-                var l = 0, sblimit;
                 var output = this.output;
+                var l = 0, sblimit = void 0;
                 if (channel.block_type === 2) {
                     this.reorder(xr[ch], channel, sfbwidth[ch]);
                     /*
@@ -4057,8 +4089,9 @@ var Layer3 = /** @class */ (function () {
                      * lower two subbands of mixed blocks. Most other implementations do
                      * this, so by default we will too.
                      */
-                    if (channel.flags & MIXED_BLOCK_FLAG)
+                    if (channel.flags & MIXED_BLOCK_FLAG) {
                         this.aliasreduce(xr[ch], 36);
+                    }
                 }
                 else {
                     this.aliasreduce(xr[ch], 576);
@@ -4066,8 +4099,9 @@ var Layer3 = /** @class */ (function () {
                 // subbands 0-1
                 if (channel.block_type !== 2 || (channel.flags & MIXED_BLOCK_FLAG)) {
                     var block_type = channel.block_type;
-                    if (channel.flags & MIXED_BLOCK_FLAG)
+                    if (channel.flags & MIXED_BLOCK_FLAG) {
                         block_type = 0;
+                    }
                     // long blocks
                     for (var sb = 0; sb < 2; ++sb, l += 18) {
                         this.imdct_l(xr[ch].subarray(l, l + 18), output, block_type);
@@ -4093,8 +4127,9 @@ var Layer3 = /** @class */ (function () {
                     for (var sb = 2; sb < sblimit; ++sb, l += 18) {
                         this.imdct_l(xr[ch].subarray(l, l + 18), output, channel.block_type);
                         this.overlap(output, frame.overlap[ch][sb], sample, sb);
-                        if (sb & 1)
+                        if (sb & 1) {
                             this.freqinver(sample, sb);
+                        }
                     }
                 }
                 else {
@@ -4102,15 +4137,17 @@ var Layer3 = /** @class */ (function () {
                     for (var sb = 2; sb < sblimit; ++sb, l += 18) {
                         this.imdct_s(xr[ch].subarray(l, l + 18), output);
                         this.overlap(output, frame.overlap[ch][sb], sample, sb);
-                        if (sb & 1)
+                        if (sb & 1) {
                             this.freqinver(sample, sb);
+                        }
                     }
                 }
                 // remaining (zero) subbands
                 for (var sb = sblimit; sb < 32; ++sb) {
                     this.overlap_z(frame.overlap[ch][sb], sample, sb);
-                    if (sb & 1)
+                    if (sb & 1) {
                         this.freqinver(sample, sb);
+                    }
                 }
             }
         }
@@ -4119,51 +4156,61 @@ var Layer3 = /** @class */ (function () {
         var start = stream.offset();
         var slen1 = SFLEN_TABLE[channel.scalefac_compress].slen1;
         var slen2 = SFLEN_TABLE[channel.scalefac_compress].slen2;
-        var sfbi;
         if (channel.block_type === 2) {
-            sfbi = 0;
+            var sfbi = 0;
             var nsfb = (channel.flags & MIXED_BLOCK_FLAG) ? 8 + 3 * 3 : 6 * 3;
-            while (nsfb--)
+            while (nsfb--) {
                 channel.scalefac[sfbi++] = stream.read(slen1);
+            }
             nsfb = 6 * 3;
-            while (nsfb--)
+            while (nsfb--) {
                 channel.scalefac[sfbi++] = stream.read(slen2);
+            }
             nsfb = 1 * 3;
-            while (nsfb--)
+            while (nsfb--) {
                 channel.scalefac[sfbi++] = 0;
+            }
         }
         else {
             if (scfsi & 0x8) {
-                for (var sfbi = 0; sfbi < 6; ++sfbi)
+                for (var sfbi = 0; sfbi < 6; ++sfbi) {
                     channel.scalefac[sfbi] = gr0ch.scalefac[sfbi];
+                }
             }
             else {
-                for (var sfbi = 0; sfbi < 6; ++sfbi)
+                for (var sfbi = 0; sfbi < 6; ++sfbi) {
                     channel.scalefac[sfbi] = stream.read(slen1);
+                }
             }
             if (scfsi & 0x4) {
-                for (var sfbi = 6; sfbi < 11; ++sfbi)
+                for (var sfbi = 6; sfbi < 11; ++sfbi) {
                     channel.scalefac[sfbi] = gr0ch.scalefac[sfbi];
+                }
             }
             else {
-                for (var sfbi = 6; sfbi < 11; ++sfbi)
+                for (var sfbi = 6; sfbi < 11; ++sfbi) {
                     channel.scalefac[sfbi] = stream.read(slen1);
+                }
             }
             if (scfsi & 0x2) {
-                for (var sfbi = 11; sfbi < 16; ++sfbi)
+                for (var sfbi = 11; sfbi < 16; ++sfbi) {
                     channel.scalefac[sfbi] = gr0ch.scalefac[sfbi];
+                }
             }
             else {
-                for (var sfbi = 11; sfbi < 16; ++sfbi)
+                for (var sfbi = 11; sfbi < 16; ++sfbi) {
                     channel.scalefac[sfbi] = stream.read(slen2);
+                }
             }
             if (scfsi & 0x1) {
-                for (var sfbi = 16; sfbi < 21; ++sfbi)
+                for (var sfbi = 16; sfbi < 21; ++sfbi) {
                     channel.scalefac[sfbi] = gr0ch.scalefac[sfbi];
+                }
             }
             else {
-                for (var sfbi = 16; sfbi < 21; ++sfbi)
+                for (var sfbi = 16; sfbi < 21; ++sfbi) {
                     channel.scalefac[sfbi] = stream.read(slen2);
+                }
             }
             channel.scalefac[21] = 0;
         }
@@ -4171,9 +4218,9 @@ var Layer3 = /** @class */ (function () {
     };
     Layer3.prototype.scalefactors_lsf = function (stream, channel, gr1ch, mode_extension) {
         var start = stream.offset();
-        var scalefac_compress = channel.scalefac_compress;
         var index = channel.block_type === 2 ? (channel.flags & MIXED_BLOCK_FLAG ? 2 : 1) : 0;
         var slen = new Int32Array(4);
+        var scalefac_compress = channel.scalefac_compress;
         var nsfb;
         if (!((mode_extension & I_STEREO) && gr1ch)) {
             if (scalefac_compress < 400) {
@@ -4254,9 +4301,11 @@ var Layer3 = /** @class */ (function () {
     Layer3.prototype.huffmanDecode = function (stream, xr, channel, sfbwidth, part2_length) {
         var exponents = this._exponents;
         var sfbwidthptr = 0;
+        var requantized;
         var bits_left = channel.part2_3_length - part2_length;
-        if (bits_left < 0)
+        if (bits_left < 0) {
             throw new Error('bad audio data length');
+        }
         this.exponents(channel, sfbwidth, exponents);
         var peek = stream.copy();
         stream.advance(bits_left);
@@ -4275,8 +4324,9 @@ var Layer3 = /** @class */ (function () {
         var table = entry.table;
         var linbits = entry.linbits;
         var startbits = entry.startbits;
-        if (typeof table === 'undefined')
+        if (typeof table === 'undefined') {
             throw new Error('bad Huffman table select');
+        }
         var expptr = 0;
         var exp = exponents[expptr++];
         var reqhits = 0;
@@ -4286,16 +4336,19 @@ var Layer3 = /** @class */ (function () {
                 sfbound += sfbwidth[sfbwidthptr++];
                 // change table if region boundary
                 if (--rcount === 0) {
-                    if (region === 0)
+                    if (region === 0) {
                         rcount = channel.region1_count + 1;
-                    else
+                    }
+                    else {
                         rcount = 0; // all remaining
+                    }
                     entry = huff_pair_table[channel.table_select[++region]];
                     table = entry.table;
                     linbits = entry.linbits;
                     startbits = entry.startbits;
-                    if (typeof table === 'undefined')
+                    if (typeof table === 'undefined') {
                         throw new Error('bad Huffman table select');
+                    }
                 }
                 if (exp !== exponents[expptr]) {
                     exp = exponents[expptr];
@@ -4386,8 +4439,9 @@ var Layer3 = /** @class */ (function () {
                     xr[xrptr] = 0;
                 }
                 else {
-                    if (reqhits & (1 << value))
+                    if (reqhits & (1 << value)) {
                         requantized = reqcache[value];
+                    }
                     else {
                         reqhits |= (1 << value);
                         requantized = reqcache[value] = this.requantize(value, exp);
@@ -4399,8 +4453,9 @@ var Layer3 = /** @class */ (function () {
                     xr[xrptr + 1] = 0;
                 }
                 else {
-                    if (reqhits & (1 << value))
+                    if (reqhits & (1 << value)) {
                         requantized = reqcache[value];
+                    }
                     else {
                         reqhits |= (1 << value);
                         requantized = reqcache[value] = this.requantize(value, exp);
@@ -4410,11 +4465,12 @@ var Layer3 = /** @class */ (function () {
             }
             xrptr += 2;
         }
-        if (cachesz + bits_left < 0)
+        if (cachesz + bits_left < 0) {
             throw new Error('Huffman data overrun');
-        // count1    
+        }
+        // count1
         table = huff_quad_table[channel.flags & COUNT1TABLE_SELECT];
-        var requantized = this.requantize(1, exp);
+        requantized = this.requantize(1, exp);
         while (cachesz + bits_left > 0 && xrptr <= 572) {
             if (cachesz < 10) {
                 bitcache = (bitcache << 16) | peek.read(16);
@@ -4461,7 +4517,7 @@ var Layer3 = /** @class */ (function () {
             }
         }
         if (-bits_left > MP3FrameHeader.BUFFER_GUARD * 8) {
-            throw new Error("assertion failed: (-bits_left <= MP3FrameHeader.BUFFER_GUARD * CHAR_BIT)");
+            throw new Error('assertion failed: (-bits_left <= MP3FrameHeader.BUFFER_GUARD * CHAR_BIT)');
         }
         // rzero
         while (xrptr < 576) {
@@ -4525,11 +4581,14 @@ var Layer3 = /** @class */ (function () {
     Layer3.prototype.stereo = function (xr, granules, gr, header, sfbwidth) {
         var granule = granules[gr];
         var modes = this.modes;
-        var sfbi, l, n, i;
-        if (granule.ch[0].block_type !== granule.ch[1].block_type || (granule.ch[0].flags & MIXED_BLOCK_FLAG) !== (granule.ch[1].flags & MIXED_BLOCK_FLAG))
+        var sfbi, n;
+        if (granule.ch[0].block_type !== granule.ch[1].block_type
+            || (granule.ch[0].flags & MIXED_BLOCK_FLAG) !== (granule.ch[1].flags & MIXED_BLOCK_FLAG)) {
             throw new Error('incompatible stereo block_type');
-        for (var i_1 = 0; i_1 < 39; i_1++)
-            modes[i_1] = header.mode_extension;
+        }
+        for (var i = 0; i < 39; i++) {
+            modes[i] = header.mode_extension;
+        }
         // intensity stereo
         if (header.mode_extension & I_STEREO) {
             var right_ch = granule.ch[1];
@@ -4537,14 +4596,16 @@ var Layer3 = /** @class */ (function () {
             header.flags |= MP3FrameHeader.FLAGS.I_STEREO;
             // first determine which scalefactor bands are to be processed
             if (right_ch.block_type === 2) {
-                var lower = void 0, start = void 0, max = void 0, bound = new Uint32Array(3), w = void 0;
+                var lower = void 0, start = void 0, max = void 0, w = void 0;
+                var bound = new Uint32Array(3);
                 lower = start = max = bound[0] = bound[1] = bound[2] = 0;
-                sfbi = l = 0;
+                sfbi = 0;
+                var l = 0;
                 if (right_ch.flags & MIXED_BLOCK_FLAG) {
                     while (l < 36) {
                         n = sfbwidth[sfbi++];
-                        for (var i_2 = 0; i_2 < n; ++i_2) {
-                            if (right_xr[i_2]) {
+                        for (var i = 0; i < n; ++i) {
+                            if (right_xr[i]) {
                                 lower = sfbi;
                                 break;
                             }
@@ -4556,7 +4617,7 @@ var Layer3 = /** @class */ (function () {
                 }
                 while (l < 576) {
                     n = sfbwidth[sfbi++];
-                    for (i = 0; i < n; ++i) {
+                    for (var i = 0; i < n; ++i) {
                         if (right_xr[i]) {
                             max = bound[w] = sfbi;
                             break;
@@ -4566,24 +4627,28 @@ var Layer3 = /** @class */ (function () {
                     l += n;
                     w = (w + 1) % 3;
                 }
-                if (max)
+                if (max) {
                     lower = start;
+                }
                 // long blocks
-                for (i = 0; i < lower; ++i)
+                for (var i = 0; i < lower; ++i) {
                     modes[i] = header.mode_extension & ~I_STEREO;
+                }
                 // short blocks
                 w = 0;
-                for (i = start; i < max; ++i) {
-                    if (i < bound[w])
+                for (var i = start; i < max; ++i) {
+                    if (i < bound[w]) {
                         modes[i] = header.mode_extension & ~I_STEREO;
+                    }
                     w = (w + 1) % 3;
                 }
             }
             else {
                 var bound = 0;
-                for (sfbi = l = 0; l < 576; l += n) {
+                sfbi = 0;
+                for (var l = 0; l < 576; l += n) {
                     n = sfbwidth[sfbi++];
-                    for (i = 0; i < n; ++i) {
+                    for (var i = 0; i < n; ++i) {
                         if (right_xr[i]) {
                             bound = sfbi;
                             break;
@@ -4591,8 +4656,9 @@ var Layer3 = /** @class */ (function () {
                     }
                     right_xr += n;
                 }
-                for (i = 0; i < bound; ++i)
+                for (var i = 0; i < bound; ++i) {
                     modes[i] = header.mode_extension & ~I_STEREO;
+                }
             }
             // now do the actual processing
             if (header.flags & MP3FrameHeader.FLAGS.LSF_EXT) {
@@ -4600,16 +4666,18 @@ var Layer3 = /** @class */ (function () {
                 // intensity_scale
                 // https://github.com/audiocogs/mp3.js/issues/23
                 var lsf_scale = SF_TABLE[right_ch.scalefac_compress & 0x1];
-                for (sfbi = l = 0; l < 576; ++sfbi, l += n) {
+                sfbi = 0;
+                for (var l = 0; l < 576; ++sfbi, l += n) {
                     n = sfbwidth[sfbi];
-                    if (!(modes[sfbi] & I_STEREO))
+                    if (!(modes[sfbi] & I_STEREO)) {
                         continue;
+                    }
                     if (illegal_pos[sfbi]) {
                         modes[sfbi] &= ~I_STEREO;
                         continue;
                     }
                     var is_pos = right_ch.scalefac[sfbi];
-                    for (i = 0; i < n; ++i) {
+                    for (var i = 0; i < n; ++i) {
                         var left = xr[0][l + i];
                         if (is_pos === 0) {
                             xr[1][l + i] = left;
@@ -4628,16 +4696,18 @@ var Layer3 = /** @class */ (function () {
                 }
             }
             else {
-                for (sfbi = l = 0; l < 576; ++sfbi, l += n) {
+                sfbi = 0;
+                for (var l = 0; l < 576; ++sfbi, l += n) {
                     n = sfbwidth[sfbi];
-                    if (!(modes[sfbi] & I_STEREO))
+                    if (!(modes[sfbi] & I_STEREO)) {
                         continue;
+                    }
                     var is_pos = right_ch.scalefac[sfbi];
                     if (is_pos >= 7) { // illegal intensity position
                         modes[sfbi] &= ~I_STEREO;
                         continue;
                     }
-                    for (i = 0; i < n; ++i) {
+                    for (var i = 0; i < n; ++i) {
                         var left = xr[0][l + i];
                         xr[0][l + i] = left * IS_TABLE[is_pos];
                         xr[1][l + i] = left * IS_TABLE[6 - is_pos];
@@ -4649,11 +4719,13 @@ var Layer3 = /** @class */ (function () {
         if (header.mode_extension & MS_STEREO) {
             header.flags |= MS_STEREO;
             var invsqrt2 = ROOT_TABLE[3 + -2];
-            for (sfbi = l = 0; l < 576; ++sfbi, l += n) {
+            sfbi = 0;
+            for (var l = 0; l < 576; ++sfbi, l += n) {
                 n = sfbwidth[sfbi];
-                if (modes[sfbi] !== MS_STEREO)
+                if (modes[sfbi] !== MS_STEREO) {
                     continue;
-                for (i = 0; i < n; ++i) {
+                }
+                for (var i = 0; i < n; ++i) {
                     var m = xr[0][l + i];
                     var s = xr[1][l + i];
                     xr[0][l + i] = (m + s) * invsqrt2; // l = (m + s) / sqrt(2)
@@ -4672,7 +4744,6 @@ var Layer3 = /** @class */ (function () {
             }
         }
     };
-    
     // perform IMDCT and windowing for long blocks
     Layer3.prototype.imdct_l = function (X, z, block_type) {
         // IMDCT
@@ -4680,28 +4751,34 @@ var Layer3 = /** @class */ (function () {
         // windowing
         switch (block_type) {
             case 0: // normal window
-                for (var i = 0; i < 36; ++i)
+                for (var i = 0; i < 36; ++i) {
                     z[i] = z[i] * WINDOW_L[i];
+                }
                 break;
             case 1: // start block
-                for (var i = 0; i < 18; ++i)
+                for (var i = 0; i < 18; ++i) {
                     z[i] = z[i] * WINDOW_L[i];
-                for (var i = 24; i < 30; ++i)
+                }
+                for (var i = 24; i < 30; ++i) {
                     z[i] = z[i] * WINDOW_S[i - 18];
-                for (var i = 30; i < 36; ++i)
+                }
+                for (var i = 30; i < 36; ++i) {
                     z[i] = 0;
+                }
                 break;
             case 3: // stop block
-                for (var i = 0; i < 6; ++i)
+                for (var i = 0; i < 6; ++i) {
                     z[i] = 0;
-                for (var i = 6; i < 12; ++i)
+                }
+                for (var i = 6; i < 12; ++i) {
                     z[i] = z[i] * WINDOW_S[i - 6];
-                for (var i = 18; i < 36; ++i)
+                }
+                for (var i = 18; i < 36; ++i) {
                     z[i] = z[i] * WINDOW_L[i];
+                }
                 break;
         }
     };
-    
     /*
      * perform IMDCT and windowing for short blocks
      */
@@ -4709,7 +4786,7 @@ var Layer3 = /** @class */ (function () {
         var yptr = 0;
         var Xptr = 0;
         var y = new Float64Array(36);
-        var hi, lo;
+        var lo;
         // IMDCT
         for (var w = 0; w < 3; ++w) {
             var sptr = 0;
@@ -4761,17 +4838,16 @@ var Layer3 = /** @class */ (function () {
         }
     };
     Layer3.prototype.freqinver = function (sample, sb) {
-        for (var i = 1; i < 18; i += 2)
+        for (var i = 1; i < 18; i += 2) {
             sample[i][sb] = -sample[i][sb];
+        }
     };
-    
     Layer3.prototype.overlap_z = function (overlap, sample, sb) {
         for (var i = 0; i < 18; ++i) {
             sample[i][sb] = overlap[i];
             overlap[i] = 0;
         }
     };
-    
     Layer3.prototype.reorder = function (xr, channel, sfbwidth) {
         var sfbwidthPointer = 0;
         var tmp = this.tmp;
@@ -4780,17 +4856,18 @@ var Layer3 = /** @class */ (function () {
         // this is probably wrong for 8000 Hz mixed blocks
         var sb = 0;
         if (channel.flags & MIXED_BLOCK_FLAG) {
-            var sb = 2;
+            sb = 2;
             var l = 0;
-            while (l < 36)
+            while (l < 36) {
                 l += sfbwidth[sfbwidthPointer++];
+            }
         }
-        for (var w = 0; w < 3; ++w) {
+        var w = 0;
+        for (w = 0; w < 3; ++w) {
             sbw[w] = sb;
             sw[w] = 0;
         }
         var f = sfbwidth[sfbwidthPointer++];
-        w = 0;
         for (var l = 18 * sb; l < 576; ++l) {
             if (f-- === 0) {
                 f = sfbwidth[sfbwidthPointer++] - 1;
@@ -4828,20 +4905,21 @@ var MP3Frame = /** @class */ (function () {
         this.decoders = [];
     }
     MP3Frame.prototype.decode = function (stream) {
-        if (!this.header || !(this.header.flags & MP3FrameHeader.FLAGS.INCOMPLETE))
+        if (!this.header || !(this.header.flags & MP3FrameHeader.FLAGS.INCOMPLETE)) {
             this.header = MP3FrameHeader.decode(stream);
+        }
         this.header.flags &= ~MP3FrameHeader.FLAGS.INCOMPLETE;
         // make an instance of the decoder for this layer if needed
         var decoder = this.decoders[this.header.layer - 1];
         if (!decoder) {
             var Layer = MP3Frame.layers[this.header.layer];
-            if (!Layer)
-                throw new Error("Layer " + this.header.layer + " is not supported.");
+            if (!Layer) {
+                throw new Error('Layer ' + this.header.layer + ' is not supported.');
+            }
             decoder = this.decoders[this.header.layer - 1] = new Layer();
         }
         decoder.decode(stream, this);
     };
-    
     // included layer decoders are registered here
     MP3Frame.layers = [
         null,
@@ -5115,12 +5193,11 @@ var MP3Synth = /** @class */ (function () {
          *  49 shifts (not counting SSO)
          */
     };
-    
     /*
      * perform full frequency PCM synthesis
      */
     MP3Synth.prototype.full = function (frame, nch, ns) {
-        var Dptr, hi, lo, ptr;
+        var Dptr, lo, ptr;
         for (var ch = 0; ch < nch; ++ch) {
             var sbsample = frame.sbsample[ch];
             var filter = this.filter[ch];
@@ -5141,25 +5218,27 @@ var MP3Synth = /** @class */ (function () {
                 var foPtr = 0;
                 Dptr = 0;
                 ptr = MP3Synth.D[Dptr];
-                var _fx = fx[fxPtr];
-                var _fe = fe[fePtr];
-                lo = _fx[0] * ptr[po + 0];
-                lo += _fx[1] * ptr[po + 14];
-                lo += _fx[2] * ptr[po + 12];
-                lo += _fx[3] * ptr[po + 10];
-                lo += _fx[4] * ptr[po + 8];
-                lo += _fx[5] * ptr[po + 6];
-                lo += _fx[6] * ptr[po + 4];
-                lo += _fx[7] * ptr[po + 2];
-                lo = -lo;
-                lo += _fe[0] * ptr[pe + 0];
-                lo += _fe[1] * ptr[pe + 14];
-                lo += _fe[2] * ptr[pe + 12];
-                lo += _fe[3] * ptr[pe + 10];
-                lo += _fe[4] * ptr[pe + 8];
-                lo += _fe[5] * ptr[pe + 6];
-                lo += _fe[6] * ptr[pe + 4];
-                lo += _fe[7] * ptr[pe + 2];
+                {
+                    var _fx = fx[fxPtr];
+                    lo = _fx[0] * ptr[po + 0];
+                    lo += _fx[1] * ptr[po + 14];
+                    lo += _fx[2] * ptr[po + 12];
+                    lo += _fx[3] * ptr[po + 10];
+                    lo += _fx[4] * ptr[po + 8];
+                    lo += _fx[5] * ptr[po + 6];
+                    lo += _fx[6] * ptr[po + 4];
+                    lo += _fx[7] * ptr[po + 2];
+                    lo = -lo;
+                    var _fe = fe[fePtr];
+                    lo += _fe[0] * ptr[pe + 0];
+                    lo += _fe[1] * ptr[pe + 14];
+                    lo += _fe[2] * ptr[pe + 12];
+                    lo += _fe[3] * ptr[pe + 10];
+                    lo += _fe[4] * ptr[pe + 8];
+                    lo += _fe[5] * ptr[pe + 6];
+                    lo += _fe[6] * ptr[pe + 4];
+                    lo += _fe[7] * ptr[pe + 2];
+                }
                 pcm[pcm1Ptr++] = lo;
                 pcm2Ptr = pcm1Ptr + 30;
                 for (var sb = 1; sb < 16; ++sb) {
@@ -5167,59 +5246,61 @@ var MP3Synth = /** @class */ (function () {
                     ++Dptr;
                     /* D[32 - sb][i] === -D[sb][31 - i] */
                     ptr = MP3Synth.D[Dptr];
-                    var _fo_1 = fo[foPtr];
-                    var _fe_1 = fe[fePtr];
-                    lo = _fo_1[0] * ptr[po + 0];
-                    lo += _fo_1[1] * ptr[po + 14];
-                    lo += _fo_1[2] * ptr[po + 12];
-                    lo += _fo_1[3] * ptr[po + 10];
-                    lo += _fo_1[4] * ptr[po + 8];
-                    lo += _fo_1[5] * ptr[po + 6];
-                    lo += _fo_1[6] * ptr[po + 4];
-                    lo += _fo_1[7] * ptr[po + 2];
+                    var _fo = fo[foPtr];
+                    var _fe = fe[fePtr];
+                    lo = _fo[0] * ptr[po + 0];
+                    lo += _fo[1] * ptr[po + 14];
+                    lo += _fo[2] * ptr[po + 12];
+                    lo += _fo[3] * ptr[po + 10];
+                    lo += _fo[4] * ptr[po + 8];
+                    lo += _fo[5] * ptr[po + 6];
+                    lo += _fo[6] * ptr[po + 4];
+                    lo += _fo[7] * ptr[po + 2];
                     lo = -lo;
-                    lo += _fe_1[7] * ptr[pe + 2];
-                    lo += _fe_1[6] * ptr[pe + 4];
-                    lo += _fe_1[5] * ptr[pe + 6];
-                    lo += _fe_1[4] * ptr[pe + 8];
-                    lo += _fe_1[3] * ptr[pe + 10];
-                    lo += _fe_1[2] * ptr[pe + 12];
-                    lo += _fe_1[1] * ptr[pe + 14];
-                    lo += _fe_1[0] * ptr[pe + 0];
+                    lo += _fe[7] * ptr[pe + 2];
+                    lo += _fe[6] * ptr[pe + 4];
+                    lo += _fe[5] * ptr[pe + 6];
+                    lo += _fe[4] * ptr[pe + 8];
+                    lo += _fe[3] * ptr[pe + 10];
+                    lo += _fe[2] * ptr[pe + 12];
+                    lo += _fe[1] * ptr[pe + 14];
+                    lo += _fe[0] * ptr[pe + 0];
                     pcm[pcm1Ptr++] = lo;
-                    lo = _fe_1[0] * ptr[-pe + 31 - 16];
-                    lo += _fe_1[1] * ptr[-pe + 31 - 14];
-                    lo += _fe_1[2] * ptr[-pe + 31 - 12];
-                    lo += _fe_1[3] * ptr[-pe + 31 - 10];
-                    lo += _fe_1[4] * ptr[-pe + 31 - 8];
-                    lo += _fe_1[5] * ptr[-pe + 31 - 6];
-                    lo += _fe_1[6] * ptr[-pe + 31 - 4];
-                    lo += _fe_1[7] * ptr[-pe + 31 - 2];
-                    lo += _fo_1[7] * ptr[-po + 31 - 2];
-                    lo += _fo_1[6] * ptr[-po + 31 - 4];
-                    lo += _fo_1[5] * ptr[-po + 31 - 6];
-                    lo += _fo_1[4] * ptr[-po + 31 - 8];
-                    lo += _fo_1[3] * ptr[-po + 31 - 10];
-                    lo += _fo_1[2] * ptr[-po + 31 - 12];
-                    lo += _fo_1[1] * ptr[-po + 31 - 14];
-                    lo += _fo_1[0] * ptr[-po + 31 - 16];
+                    lo = _fe[0] * ptr[-pe + 31 - 16];
+                    lo += _fe[1] * ptr[-pe + 31 - 14];
+                    lo += _fe[2] * ptr[-pe + 31 - 12];
+                    lo += _fe[3] * ptr[-pe + 31 - 10];
+                    lo += _fe[4] * ptr[-pe + 31 - 8];
+                    lo += _fe[5] * ptr[-pe + 31 - 6];
+                    lo += _fe[6] * ptr[-pe + 31 - 4];
+                    lo += _fe[7] * ptr[-pe + 31 - 2];
+                    lo += _fo[7] * ptr[-po + 31 - 2];
+                    lo += _fo[6] * ptr[-po + 31 - 4];
+                    lo += _fo[5] * ptr[-po + 31 - 6];
+                    lo += _fo[4] * ptr[-po + 31 - 8];
+                    lo += _fo[3] * ptr[-po + 31 - 10];
+                    lo += _fo[2] * ptr[-po + 31 - 12];
+                    lo += _fo[1] * ptr[-po + 31 - 14];
+                    lo += _fo[0] * ptr[-po + 31 - 16];
                     pcm[pcm2Ptr--] = lo;
                     ++foPtr;
                 }
                 ++Dptr;
-                ptr = MP3Synth.D[Dptr];
-                var _fo = fo[foPtr];
-                lo = _fo[0] * ptr[po + 0];
-                lo += _fo[1] * ptr[po + 14];
-                lo += _fo[2] * ptr[po + 12];
-                lo += _fo[3] * ptr[po + 10];
-                lo += _fo[4] * ptr[po + 8];
-                lo += _fo[5] * ptr[po + 6];
-                lo += _fo[6] * ptr[po + 4];
-                lo += _fo[7] * ptr[po + 2];
-                pcm[pcm1Ptr] = -lo;
-                pcm1Ptr += 16;
-                phase = (phase + 1) % 16;
+                {
+                    ptr = MP3Synth.D[Dptr];
+                    var _fo = fo[foPtr];
+                    lo = _fo[0] * ptr[po + 0];
+                    lo += _fo[1] * ptr[po + 14];
+                    lo += _fo[2] * ptr[po + 12];
+                    lo += _fo[3] * ptr[po + 10];
+                    lo += _fo[4] * ptr[po + 8];
+                    lo += _fo[5] * ptr[po + 6];
+                    lo += _fo[6] * ptr[po + 4];
+                    lo += _fo[7] * ptr[po + 2];
+                    pcm[pcm1Ptr] = -lo;
+                    pcm1Ptr += 16;
+                    phase = (phase + 1) % 16;
+                }
             }
         }
     };
@@ -5829,29 +5910,33 @@ var MP3Synth = /** @class */ (function () {
     return MP3Synth;
 }());
 
-var __extends = (this && this.__extends) || (function () {
-    var extendStatics = Object.setPrototypeOf ||
-        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
-        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
+var __extends$2 = (this && this.__extends) || (function () {
+    var extendStatics = function (d, b) {
+        extendStatics = Object.setPrototypeOf ||
+            ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+            function (d, b) { for (var p in b) if (Object.prototype.hasOwnProperty.call(b, p)) d[p] = b[p]; };
+        return extendStatics(d, b);
+    };
     return function (d, b) {
+        if (typeof b !== "function" && b !== null)
+            throw new TypeError("Class extends value " + String(b) + " is not a constructor or null");
         extendStatics(d, b);
         function __() { this.constructor = d; }
         d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
     };
 })();
 var MP3Decoder = /** @class */ (function (_super) {
-    __extends(MP3Decoder, _super);
+    __extends$2(MP3Decoder, _super);
     function MP3Decoder() {
         return _super !== null && _super.apply(this, arguments) || this;
     }
-    MP3Decoder.prototype.setCookie = function (cookie) { };
     MP3Decoder.prototype.init = function () {
         this.mp3_stream = new MP3Stream(this.bitstream);
         this.frame = new MP3Frame();
         this.synth = new MP3Synth();
         this.seeking = false;
     };
-    
+    MP3Decoder.prototype.setCookie = function (cookie) { };
     MP3Decoder.prototype.readChunk = function () {
         var stream = this.mp3_stream;
         var frame = this.frame;
@@ -5865,8 +5950,9 @@ var MP3Decoder = /** @class */ (function (_super) {
                     break;
                 }
                 catch (err) {
-                    if (err == "UnderflowError")
+                    if (err === 'UnderflowError') {
                         throw err;
+                    }
                 }
             }
             this.seeking = false;
@@ -5886,7 +5972,11 @@ var MP3Decoder = /** @class */ (function (_super) {
         }
         synth.frame(frame);
         // interleave samples
-        var data = synth.pcm.samples, channels = synth.pcm.channels, len = synth.pcm.length, output = new Float32Array(len * channels), j = 0;
+        var data = synth.pcm.samples;
+        var channels = synth.pcm.channels;
+        var len = synth.pcm.length;
+        var output = new Float32Array(len * channels);
+        var j = 0;
         for (var k = 0; k < len; k++) {
             for (var i = 0; i < channels; i++) {
                 output[j++] = data[i][k];
@@ -5894,7 +5984,6 @@ var MP3Decoder = /** @class */ (function (_super) {
         }
         return output;
     };
-    
     MP3Decoder.prototype.seek = function (timestamp) {
         var offset;
         // if there was a Xing or VBRI tag with a seek table, use that
@@ -5907,47 +5996,58 @@ var MP3Decoder = /** @class */ (function (_super) {
             offset = timestamp * this.format.bitrate / 8 / this.format.sampleRate;
         }
         this.mp3_stream.reset(offset);
+        var j = 0;
+        var i = 0;
         // try to find 3 consecutive valid frame headers in a row
-        for (var i = 0; i < 4096; i++) {
+        for (i = 0; i < 4096; i++) {
             var pos = offset + i;
-            for (var j = 0; j < 3; j++) {
+            for (j = 0; j < 3; j++) {
                 this.mp3_stream.reset(pos);
+                var header = void 0;
                 try {
-                    var header = MP3FrameHeader.decode(this.mp3_stream);
+                    header = MP3FrameHeader.decode(this.mp3_stream);
                 }
                 catch (e) {
                     break;
                 }
                 // skip the rest of the frame
                 var size = header.framesize();
-                if (size == null)
+                if (size == null) {
                     break;
+                }
                 pos += size;
             }
             // check if we're done
-            if (j === 3)
+            if (j === 3) {
                 break;
+            }
         }
         // if we didn't find 3 frames, just try the first one and hope for the best
-        if (j !== 3)
+        if (j !== 3) {
             i = 0;
+        }
         this.mp3_stream.reset(offset + i);
         // if we guesstimated, update the timestamp to another estimate of where we actually seeked to
-        if (this.demuxer.seekPoints.length === 0)
+        if (this.demuxer.seekPoints.length === 0) {
             timestamp = this.stream.offset / (this.format.bitrate / 8) * this.format.sampleRate;
+        }
         this.seeking = true;
         return timestamp;
     };
-    
     return MP3Decoder;
-}(Decoder));
-Decoder.register('mp3', MP3Decoder);
+}(AV.Decoder));
+AV.Decoder.register('mp3', MP3Decoder);
 
-var __extends$2 = (this && this.__extends) || (function () {
-    var extendStatics = Object.setPrototypeOf ||
-        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
-        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
+var __extends$1 = (this && this.__extends) || (function () {
+    var extendStatics = function (d, b) {
+        extendStatics = Object.setPrototypeOf ||
+            ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+            function (d, b) { for (var p in b) if (Object.prototype.hasOwnProperty.call(b, p)) d[p] = b[p]; };
+        return extendStatics(d, b);
+    };
     return function (d, b) {
+        if (typeof b !== "function" && b !== null)
+            throw new TypeError("Class extends value " + String(b) + " is not a constructor or null");
         extendStatics(d, b);
         function __() { this.constructor = d; }
         d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
@@ -5955,7 +6055,7 @@ var __extends$2 = (this && this.__extends) || (function () {
 })();
 var ENCODINGS = ['latin1', 'utf16-bom', 'utf16-be', 'utf8'];
 var ID3Stream = /** @class */ (function (_super) {
-    __extends$2(ID3Stream, _super);
+    __extends$1(ID3Stream, _super);
     function ID3Stream(header, stream) {
         var _this = _super.call(this) || this;
         _this.offset = 0;
@@ -5967,12 +6067,13 @@ var ID3Stream = /** @class */ (function (_super) {
         if (!this.data) {
             this.data = {};
             // read all frames
-            var frame;
+            var frame = void 0;
             while (frame = this.readFrame()) {
                 // if we already have an instance of this key, add it to an array
                 if (frame.key in this.data) {
-                    if (!Array.isArray(this.data[frame.key]))
+                    if (!Array.isArray(this.data[frame.key])) {
                         this.data[frame.key] = [this.data[frame.key]];
+                    }
                     this.data[frame.key].push(frame.value);
                 }
                 else {
@@ -5983,9 +6084,10 @@ var ID3Stream = /** @class */ (function (_super) {
         return this.data;
     };
     ID3Stream.prototype.readFrame = function () {
-        if (this.offset >= this.header.length)
+        if (this.offset >= this.header.length) {
             return null;
-        // get the header    
+        }
+        // get the header
         var header = this.readHeader();
         var decoder = header.identifier;
         var frameTypes = this.getFrameTypes();
@@ -5998,6 +6100,9 @@ var ID3Stream = /** @class */ (function (_super) {
         // map common frame names to a single type
         if (!frameTypes[decoder]) {
             for (var key in map) {
+                if (!map.hasOwnProperty(key)) {
+                    continue;
+                }
                 if (map[key].indexOf(decoder) !== -1) {
                     decoder = key;
                     break;
@@ -6007,36 +6112,46 @@ var ID3Stream = /** @class */ (function (_super) {
         var result;
         if (frameTypes[decoder]) {
             // decode the frame
-            var frame = this.decodeFrame(header, frameTypes[decoder]), keys = Object.keys(frame);
-            // if it only returned one key, use that as the value    
-            if (keys.length === 1)
+            var frame = this.decodeFrame(header, frameTypes[decoder]);
+            var keys = Object.keys(frame);
+            // if it only returned one key, use that as the value
+            if (keys.length === 1) {
                 frame = frame[keys[0]];
+            }
             result = {
                 value: frame,
-                key: ""
+                key: ''
             };
         }
         else {
             // No frame type found, treat it as binary
             result = {
                 value: this.stream.readBuffer(Math.min(header.length, this.header.length - this.offset)),
-                key: ""
+                key: ''
             };
         }
         result.key = names[header.identifier] ? names[header.identifier] : header.identifier;
         // special sauce for cover art, which should just be a buffer
-        if (result.key === 'coverArt')
+        if (result.key === 'coverArt') {
             result.value = result.value.data;
+        }
         this.offset += 10 + header.length;
         return result;
     };
     ID3Stream.prototype.decodeFrame = function (header, fields) {
-        var stream = this.stream, start = stream.offset;
-        var encoding = 0, ret = {};
-        var len = Object.keys(fields).length, i = 0;
+        var stream = this.stream;
+        var start = stream.offset;
+        var ret = {};
+        var len = Object.keys(fields).length;
+        var encoding = 0;
+        var i = 0;
+        var rest;
         for (var key in fields) {
+            if (!fields.hasOwnProperty(key)) {
+                continue;
+            }
             var type = fields[key];
-            var rest = header.length - (stream.offset - start);
+            rest = header.length - (stream.offset - start);
             i++;
             // check for special field names
             switch (key) {
@@ -6072,12 +6187,13 @@ var ID3Stream = /** @class */ (function (_super) {
                     break;
                 case 'int32+':
                     ret[key] = stream.readInt32();
-                    if (rest > 4)
+                    if (rest > 4) {
                         throw new Error('Seriously dude? Stop playing this song and get a life!');
+                    }
                     break;
                 case 'date':
                     var val = stream.readString(8);
-                    ret[key] = new Date(parseInt(val.slice(0, 4)), parseInt(val.slice(4, 6)) - 1, parseInt(val.slice(6, 8)));
+                    ret[key] = new Date(parseInt(val.slice(0, 4), 10), parseInt(val.slice(4, 6), 10) - 1, parseInt(val.slice(6, 8), 10));
                     break;
                 case 'frame_id':
                     ret[key] = stream.readString(4);
@@ -6087,39 +6203,19 @@ var ID3Stream = /** @class */ (function (_super) {
             }
         }
         // Just in case something went wrong...
-        var rest = header.length - (stream.offset - start);
-        if (rest > 0)
+        rest = header.length - (stream.offset - start);
+        if (rest > 0) {
             stream.advance(rest);
+        }
         return ret;
     };
     return ID3Stream;
-}(Base));
+}(AV.Base));
 // ID3 v2.3 and v2.4 support
 var ID3v23Stream = /** @class */ (function (_super) {
-    __extends$2(ID3v23Stream, _super);
+    __extends$1(ID3v23Stream, _super);
     function ID3v23Stream() {
         var _this = _super !== null && _super.apply(this, arguments) || this;
-        _this.map = {
-            text: [
-                // Identification Frames
-                'TIT1', 'TIT2', 'TIT3', 'TALB', 'TOAL', 'TRCK', 'TPOS', 'TSST', 'TSRC',
-                // Involved Persons Frames
-                'TPE1', 'TPE2', 'TPE3', 'TPE4', 'TOPE', 'TEXT', 'TOLY', 'TCOM', 'TMCL', 'TIPL', 'TENC',
-                // Derived and Subjective Properties Frames
-                'TBPM', 'TLEN', 'TKEY', 'TLAN', 'TCON', 'TFLT', 'TMED', 'TMOO',
-                // Rights and Licence Frames
-                'TCOP', 'TPRO', 'TPUB', 'TOWN', 'TRSN', 'TRSO',
-                // Other Text Frames
-                'TOFN', 'TDLY', 'TDEN', 'TDOR', 'TDRC', 'TDRL', 'TDTG', 'TSSE', 'TSOA', 'TSOP', 'TSOT',
-                // Deprecated Text Frames
-                'TDAT', 'TIME', 'TORY', 'TRDA', 'TSIZ', 'TYER',
-                // Non-standard iTunes Frames
-                'TCMP', 'TSO2', 'TSOC'
-            ],
-            url: [
-                'WCOM', 'WCOP', 'WOAF', 'WOAR', 'WOAS', 'WORS', 'WPAY', 'WPUB'
-            ]
-        };
         _this.frameTypes = {
             text: {
                 encoding: 1,
@@ -6309,6 +6405,27 @@ var ID3v23Stream = /** @class */ (function (_super) {
                 data: 'binary' // TODO
             }
         };
+        _this.map = {
+            text: [
+                // Identification Frames
+                'TIT1', 'TIT2', 'TIT3', 'TALB', 'TOAL', 'TRCK', 'TPOS', 'TSST', 'TSRC',
+                // Involved Persons Frames
+                'TPE1', 'TPE2', 'TPE3', 'TPE4', 'TOPE', 'TEXT', 'TOLY', 'TCOM', 'TMCL', 'TIPL', 'TENC',
+                // Derived and Subjective Properties Frames
+                'TBPM', 'TLEN', 'TKEY', 'TLAN', 'TCON', 'TFLT', 'TMED', 'TMOO',
+                // Rights and Licence Frames
+                'TCOP', 'TPRO', 'TPUB', 'TOWN', 'TRSN', 'TRSO',
+                // Other Text Frames
+                'TOFN', 'TDLY', 'TDEN', 'TDOR', 'TDRC', 'TDRL', 'TDTG', 'TSSE', 'TSOA', 'TSOP', 'TSOT',
+                // Deprecated Text Frames
+                'TDAT', 'TIME', 'TORY', 'TRDA', 'TSIZ', 'TYER',
+                // Non-standard iTunes Frames
+                'TCMP', 'TSO2', 'TSOC'
+            ],
+            url: [
+                'WCOM', 'WCOP', 'WOAF', 'WOAR', 'WOAS', 'WORS', 'WPAY', 'WPUB'
+            ]
+        };
         _this.names = {
             // Identification Frames
             'TIT1': 'grouping',
@@ -6427,8 +6544,9 @@ var ID3v23Stream = /** @class */ (function (_super) {
         var identifier = this.stream.readString(4);
         var length = 0;
         if (this.header.major === 4) {
-            for (var i = 0; i < 4; i++)
+            for (var i = 0; i < 4; i++) {
                 length = (length << 7) + (this.stream.readUInt8() & 0x7f);
+            }
         }
         else {
             length = this.stream.readUInt32();
@@ -6452,7 +6570,7 @@ var ID3v23Stream = /** @class */ (function (_super) {
 }(ID3Stream));
 // ID3 v2.2 support
 var ID3v22Stream = /** @class */ (function (_super) {
-    __extends$2(ID3v22Stream, _super);
+    __extends$1(ID3v22Stream, _super);
     function ID3v22Stream() {
         var _this = _super !== null && _super.apply(this, arguments) || this;
         // map 3 char ID3 v2.2 names to 4 char ID3 v2.3/4 names
@@ -6546,8 +6664,9 @@ var ID3v22Stream = /** @class */ (function (_super) {
     ID3v22Stream.prototype.readHeader = function () {
         var id = this.stream.readString(3);
         var frameTypes = this.getFrameTypes();
-        if (this.frameReplacements[id] && !frameTypes[id])
+        if (this.frameReplacements[id] && !frameTypes[id]) {
             frameTypes[id] = this.frameReplacements[id];
+        }
         return {
             identifier: this.replacements[id] || id,
             length: this.stream.readUInt24()
@@ -6556,11 +6675,16 @@ var ID3v22Stream = /** @class */ (function (_super) {
     return ID3v22Stream;
 }(ID3v23Stream));
 
-var __extends$1 = (this && this.__extends) || (function () {
-    var extendStatics = Object.setPrototypeOf ||
-        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
-        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
+var __extends = (this && this.__extends) || (function () {
+    var extendStatics = function (d, b) {
+        extendStatics = Object.setPrototypeOf ||
+            ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+            function (d, b) { for (var p in b) if (Object.prototype.hasOwnProperty.call(b, p)) d[p] = b[p]; };
+        return extendStatics(d, b);
+    };
     return function (d, b) {
+        if (typeof b !== "function" && b !== null)
+            throw new TypeError("Class extends value " + String(b) + " is not a constructor or null");
         extendStatics(d, b);
         function __() { this.constructor = d; }
         d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
@@ -6568,48 +6692,48 @@ var __extends$1 = (this && this.__extends) || (function () {
 })();
 var XING_OFFSETS = [[32, 17], [17, 9]];
 var MP3Demuxer = /** @class */ (function (_super) {
-    __extends$1(MP3Demuxer, _super);
+    __extends(MP3Demuxer, _super);
     function MP3Demuxer() {
         return _super !== null && _super.apply(this, arguments) || this;
     }
-    MP3Demuxer.prototype.init = function () {
-    };
     MP3Demuxer.probe = function (stream) {
         var off = stream.offset;
         // skip id3 metadata if it exists
         var id3header = MP3Demuxer.getID3v2Header(stream);
-        if (id3header)
+        if (id3header) {
             stream.advance(10 + id3header.length);
+        }
         // attempt to read the header of the first audio frame
-        var s = new MP3Stream(new Bitstream(stream));
+        var s = new MP3Stream(new AV.Bitstream(stream));
         var header = null;
         try {
             header = MP3FrameHeader.decode(s);
         }
         catch (e) { }
-        
         // go back to the beginning, for other probes
         stream.seek(off);
         return !!header;
     };
     MP3Demuxer.getID3v2Header = function (stream) {
-        if (stream.peekString(0, 3) == 'ID3') {
-            stream = Stream.fromBuffer(stream.peekBuffer(0, 10));
+        if (stream.peekString(0, 3) === 'ID3') {
+            stream = AV.Stream.fromBuffer(stream.peekBuffer(0, 10));
             stream.advance(3); // 'ID3'
             var major = stream.readUInt8();
             var minor = stream.readUInt8();
             var flags = stream.readUInt8();
             var bytes = stream.readBuffer(4).data;
-            var length = (bytes[0] << 21) | (bytes[1] << 14) | (bytes[2] << 7) | bytes[3];
+            var length_1 = (bytes[0] << 21) | (bytes[1] << 14) | (bytes[2] << 7) | bytes[3];
             return {
                 version: '2.' + major + '.' + minor,
                 major: major,
                 minor: minor,
                 flags: flags,
-                length: length
+                length: length_1
             };
         }
         return null;
+    };
+    MP3Demuxer.prototype.init = function () {
     };
     MP3Demuxer.prototype.parseDuration = function (header, off) {
         var stream = this.stream;
@@ -6617,7 +6741,7 @@ var MP3Demuxer = /** @class */ (function (_super) {
         if (this.metadata) {
             var mllt = this.metadata.MPEGLocationLookupTable;
             if (mllt) {
-                var bitstream = new Bitstream(Stream.fromBuffer(mllt.data));
+                var bitstream = new AV.Bitstream(AV.Stream.fromBuffer(mllt.data));
                 var refSize = mllt.bitsForBytesDeviation + mllt.bitsForMillisecondsDev;
                 var samples = 0;
                 var bytes = 0;
@@ -6635,17 +6759,18 @@ var MP3Demuxer = /** @class */ (function (_super) {
                 return true;
             }
         }
-        if (!header || header.layer !== 3)
+        if (!header || header.layer !== 3) {
             return false;
+        }
         // Check for Xing/Info tag
         stream.advance(XING_OFFSETS[header.flags & MP3FrameHeader.FLAGS.LSF_EXT ? 1 : 0][header.nchannels() === 1 ? 1 : 0]);
         var tag = stream.readString(4);
         if (tag === 'Xing' || tag === 'Info') {
             var flags = stream.readUInt32();
-            if (flags & 1)
+            if (flags & 1) {
                 frames = stream.readUInt32();
-            if (flags & 2)
-                var size = stream.readUInt32();
+            }
+            var size = (flags & 2) ? stream.readUInt32() : 0;
             if (flags & 4 && frames && size && this.seekPoints.length === 0) {
                 for (var i = 0; i < 100; i++) {
                     var b = stream.readUInt8();
@@ -6654,14 +6779,15 @@ var MP3Demuxer = /** @class */ (function (_super) {
                     this.addSeekPoint(pos, time);
                 }
             }
-            if (flags & 8)
+            if (flags & 8) {
                 stream.advance(4);
+            }
         }
         else {
             // Check for VBRI tag (always 32 bytes after end of mpegaudio header)
             stream.seek(off + 4 + 32);
             tag = stream.readString(4);
-            if (tag == 'VBRI' && stream.readUInt16() === 1) { // Check tag version
+            if (tag === 'VBRI' && stream.readUInt16() === 1) { // Check tag version
                 stream.advance(4); // skip delay and quality
                 stream.advance(4); // skip size
                 frames = stream.readUInt32();
@@ -6679,8 +6805,9 @@ var MP3Demuxer = /** @class */ (function (_super) {
                 }
             }
         }
-        if (!frames)
+        if (!frames) {
             return false;
+        }
         this.emit('duration', (frames * header.nbsamples() * 32) / header.samplerate * 1000 | 0);
         return true;
     };
@@ -6705,26 +6832,27 @@ var MP3Demuxer = /** @class */ (function (_super) {
             }
             // read the header of the first audio frame
             var off = stream.offset;
-            var s = new MP3Stream(new Bitstream(stream));
-            var header = MP3FrameHeader.decode(s);
-            if (!header)
+            var s = new MP3Stream(new AV.Bitstream(stream));
+            var header_1 = MP3FrameHeader.decode(s);
+            if (!header_1) {
                 return this.emit('error', 'Could not find first frame.');
+            }
             this.emit('format', {
                 formatID: 'mp3',
-                sampleRate: header.samplerate,
-                channelsPerFrame: header.nchannels(),
-                bitrate: header.bitrate,
+                sampleRate: header_1.samplerate,
+                channelsPerFrame: header_1.nchannels(),
+                bitrate: header_1.bitrate,
                 floatingPoint: true,
-                layer: header.layer,
-                flags: header.flags
+                layer: header_1.layer,
+                flags: header_1.flags
             });
-            var sentDuration = this.parseDuration(header, off);
+            var sentDuration = this.parseDuration(header_1, off);
             stream.advance(off - stream.offset);
             // if there were no Xing/VBRI tags, guesstimate the duration based on data size and bitrate
             this.dataSize = 0;
             if (!sentDuration) {
                 this.on('end', function () {
-                    _this.emit('duration', _this.dataSize * 8 / header.bitrate * 1000 | 0);
+                    _this.emit('duration', _this.dataSize * 8 / header_1.bitrate * 1000 | 0);
                 });
             }
             this.sentInfo = true;
@@ -6735,10 +6863,8 @@ var MP3Demuxer = /** @class */ (function (_super) {
             this.emit('data', buffer);
         }
     };
-    
     return MP3Demuxer;
-}(Demuxer));
-Demuxer.register(MP3Demuxer);
+}(AV.Demuxer));
+AV.Demuxer.register(MP3Demuxer);
 
 export { MP3Decoder, MP3Demuxer };
-//# sourceMappingURL=mp3-js-ts.es2015.js.map

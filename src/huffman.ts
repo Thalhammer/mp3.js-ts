@@ -5,27 +5,27 @@
  * These tables support decoding up to 4 Huffman code bits at a time.
  */
 
-const PTR = function(offs, bits) {
-    return {
-        final: 0,
-        ptr: {
-            bits:   bits,
-            offset: offs
-        }
-    };
+const PTR = function (offs, bits) {
+	return {
+		final: 0,
+		ptr: {
+			bits: bits,
+			offset: offs
+		}
+	};
 };
 
 const huffquad_V = function (v, w, x, y, hlen) {
-    return {
-        final: 1,
-        value: {
-            v: v,
-            w: w,
-            x: x,
-            y: y,
-            hlen: hlen
-        }
-    };
+	return {
+		final: 1,
+		value: {
+			v: v,
+			w: w,
+			x: x,
+			y: y,
+			hlen: hlen
+		}
+	};
 };
 
 const hufftabA = [
@@ -87,14 +87,14 @@ const hufftabB = [
 ];
 
 const V = function (x, y, hlen) {
-    return {
-        final: 1,
-        value: {
-            x: x,
-            y: y,
-            hlen: hlen
-        }
-    };
+	return {
+		final: 1,
+		value: {
+			x: x,
+			y: y,
+			hlen: hlen
+		}
+	};
 };
 
 const hufftab0 = [
@@ -2941,43 +2941,43 @@ const hufftab24 = [
 ];
 
 export class MP3Hufftable {
-/* hufftable constructor */
-constructor(public table, public linbits, public startbits) {
-}
+	/* hufftable constructor */
+	constructor(public table, public linbits, public startbits) {
+	}
 }
 /* external tables */
-export const huff_quad_table = [ hufftabA, hufftabB ];
+export const huff_quad_table = [hufftabA, hufftabB];
 export const huff_pair_table = [
-  /*  0 */ new MP3Hufftable(hufftab0,   0, 0),
-  /*  1 */ new MP3Hufftable(hufftab1,   0, 3),
-  /*  2 */ new MP3Hufftable(hufftab2,   0, 3),
-  /*  3 */ new MP3Hufftable(hufftab3,   0, 3),
-  /*  4 */ null, //new MP3Hufftable(0 /* not used */),
-  /*  5 */ new MP3Hufftable(hufftab5,   0, 3),
-  /*  6 */ new MP3Hufftable(hufftab6,   0, 4),
-  /*  7 */ new MP3Hufftable(hufftab7,   0, 4),
-  /*  8 */ new MP3Hufftable(hufftab8,   0, 4),
-  /*  9 */ new MP3Hufftable(hufftab9,   0, 4),
-  /* 10 */ new MP3Hufftable(hufftab10,  0, 4),
-  /* 11 */ new MP3Hufftable(hufftab11,  0, 4),
-  /* 12 */ new MP3Hufftable(hufftab12,  0, 4),
-  /* 13 */ new MP3Hufftable(hufftab13,  0, 4),
-  /* 14 */ null, //new MP3Hufftable(0 /* not used */),
-  /* 15 */ new MP3Hufftable(hufftab15,  0, 4),
-  /* 16 */ new MP3Hufftable(hufftab16,  1, 4),
-  /* 17 */ new MP3Hufftable(hufftab16,  2, 4),
-  /* 18 */ new MP3Hufftable(hufftab16,  3, 4),
-  /* 19 */ new MP3Hufftable(hufftab16,  4, 4),
-  /* 20 */ new MP3Hufftable(hufftab16,  6, 4),
-  /* 21 */ new MP3Hufftable(hufftab16,  8, 4),
+  /*  0 */ new MP3Hufftable(hufftab0, 0, 0),
+  /*  1 */ new MP3Hufftable(hufftab1, 0, 3),
+  /*  2 */ new MP3Hufftable(hufftab2, 0, 3),
+  /*  3 */ new MP3Hufftable(hufftab3, 0, 3),
+  /*  4 */ null, // new MP3Hufftable(0 /* not used */),
+  /*  5 */ new MP3Hufftable(hufftab5, 0, 3),
+  /*  6 */ new MP3Hufftable(hufftab6, 0, 4),
+  /*  7 */ new MP3Hufftable(hufftab7, 0, 4),
+  /*  8 */ new MP3Hufftable(hufftab8, 0, 4),
+  /*  9 */ new MP3Hufftable(hufftab9, 0, 4),
+  /* 10 */ new MP3Hufftable(hufftab10, 0, 4),
+  /* 11 */ new MP3Hufftable(hufftab11, 0, 4),
+  /* 12 */ new MP3Hufftable(hufftab12, 0, 4),
+  /* 13 */ new MP3Hufftable(hufftab13, 0, 4),
+  /* 14 */ null, // new MP3Hufftable(0 /* not used */),
+  /* 15 */ new MP3Hufftable(hufftab15, 0, 4),
+  /* 16 */ new MP3Hufftable(hufftab16, 1, 4),
+  /* 17 */ new MP3Hufftable(hufftab16, 2, 4),
+  /* 18 */ new MP3Hufftable(hufftab16, 3, 4),
+  /* 19 */ new MP3Hufftable(hufftab16, 4, 4),
+  /* 20 */ new MP3Hufftable(hufftab16, 6, 4),
+  /* 21 */ new MP3Hufftable(hufftab16, 8, 4),
   /* 22 */ new MP3Hufftable(hufftab16, 10, 4),
   /* 23 */ new MP3Hufftable(hufftab16, 13, 4),
-  /* 24 */ new MP3Hufftable(hufftab24,  4, 4),
-  /* 25 */ new MP3Hufftable(hufftab24,  5, 4),
-  /* 26 */ new MP3Hufftable(hufftab24,  6, 4),
-  /* 27 */ new MP3Hufftable(hufftab24,  7, 4),
-  /* 28 */ new MP3Hufftable(hufftab24,  8, 4),
-  /* 29 */ new MP3Hufftable(hufftab24,  9, 4),
+  /* 24 */ new MP3Hufftable(hufftab24, 4, 4),
+  /* 25 */ new MP3Hufftable(hufftab24, 5, 4),
+  /* 26 */ new MP3Hufftable(hufftab24, 6, 4),
+  /* 27 */ new MP3Hufftable(hufftab24, 7, 4),
+  /* 28 */ new MP3Hufftable(hufftab24, 8, 4),
+  /* 29 */ new MP3Hufftable(hufftab24, 9, 4),
   /* 30 */ new MP3Hufftable(hufftab24, 11, 4),
   /* 31 */ new MP3Hufftable(hufftab24, 13, 4)
 ];

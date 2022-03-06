@@ -1,6 +1,5 @@
 import * as AV from 'aurora-js-ts';
 export declare class MP3Demuxer extends AV.Demuxer {
-    init(): void;
     private dataSize;
     private metadata;
     private sentInfo;
@@ -12,6 +11,7 @@ export declare class MP3Demuxer extends AV.Demuxer {
         flags: number;
         length: number;
     };
+    init(): void;
     parseDuration(header: any, off: any): boolean;
     readChunk(): void;
 }
