@@ -4868,6 +4868,7 @@ var Layer3 = /** @class */ (function () {
             sw[w] = 0;
         }
         var f = sfbwidth[sfbwidthPointer++];
+        w = 0;
         for (var l = 18 * sb; l < 576; ++l) {
             if (f-- === 0) {
                 f = sfbwidth[sfbwidthPointer++] - 1;

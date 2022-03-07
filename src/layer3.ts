@@ -1192,7 +1192,7 @@ export class Layer3 {
 		}
 
 		let f = sfbwidth[sfbwidthPointer++];
-
+		w = 0;
 		for (let l = 18 * sb; l < 576; ++l) {
 			if (f-- === 0) {
 				f = sfbwidth[sfbwidthPointer++] - 1;
